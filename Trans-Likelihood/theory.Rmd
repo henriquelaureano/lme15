@@ -1,0 +1,149 @@
+---
+title: "Verossimilhança para modelos com variáveis transformadas"
+author: "[Paulo Justiniano Ribeiro Jr](http://leg.ufpr.br/~paulojus/) \\
+         
+         [Henrique Aparecido Laureano](http://lattes.cnpq.br/2224901552085090)"
+date: "Agosto de 2015"
+output:
+  rmarkdown::html_vignette:
+    fig_width: 5
+    fig_height: 3.5
+    fig_cap: TRUE
+    toc: yes
+---
+
+<style type="text/css">
+#TOC {
+  margin: 0 145px;
+}
+</style>
+
+```{r setup, include = FALSE}
+require(knitr)
+opts_chunk$set(
+    cache = TRUE,
+    cache.path = "cache/",
+    fig.path = "graphs/",
+    dpi = 100,
+    fig.align = "center",
+    comment = NA,
+    warning = FALSE,
+    error = FALSE)
+```
+
+***
+
+# Densidade de variável transformada
+
+Seja uma variável aleatória (v.a.) $Y$ com função densidade de probabilidade (f.d.p.) $f_{Y}(y)$ e uma
+transformação dada por uma função monótona $Y^{*} = h(Y)$.
+
+A f.d.p. de $Y^{*}$ é dada por:
+
+> $$ f_{Y^{*}}(y^{*}) = f_{Y}\left(h^{-1}(y^{*})\right) \left|\frac{\partial Y}{\partial Y^{*}}\right|, $$
+
+equivalentemente
+
+> $$ f_{Y}\left(h^{-1}(y^{*})\right) = f_{Y^{*}}(y^{*})
+                                       \left|\frac{\partial Y}{\partial Y^{*}}\right|^{-1}. $$
+
+Daqui em diante denotamos:
+
+> $$ J = \left|\frac{\partial Y}{\partial Y^{*}}\right|. $$
+
+***
+
+# Função de verossimilhança
+
+Consideramos aqui que $Y$ denota um conjunto de dados (variável resposta) na escala original e modelos em 
+que assume-se uma densidade conhecida para $Y^{*}$. Para fins de comparação de modelos (com e sem 
+transformação) é necessário obter a verossimilhança em uma escala comum, ou seja, na escala da variável 
+original.
+
+Considerando-se observações pontuais e independentes, a função de verossimilhança é dada por:
+
+> $$ L(\theta; y) \equiv f(y; \theta) = \prod_{i=1}^{n} f_{Y}(y_{i})
+                                      = \prod_{i=1}^{n} f_{Y^{*}}(y_{i}^{*}) (J_{i})^{-1} $$
+
+e a log-verossimilhança
+
+> $$ \begin{align*} 
+     l(\theta; y) = \sum_{i=1}^{n} \log(f_{Y}(y_{i})) & =
+                    \sum_{i=1}^{n} \left[\log\left(f_{Y^{*}}(y_{i}^{*})\right) - \log(J_{i})\right] \\
+                & = \sum_{i=1}^{n} \log\left(f_{Y^{*}}(y_{i}^{*})\right) - \sum_{i=1}^{n} \log(J_{i}) \\
+                & =  l(\theta; y^{*}) - \sum_{i=1}^{n} \log(J_{i}).
+     \end{align*} $$
+
+Ou seja, na prática, obtém-se a verossimilhança para o modelo ajustado com a variável transformada e 
+subtrai-se a soma dos log-Jacobianos para as observações individuais.
+
+***
+
+# Transformação Box-Cox
+
+A transformação Box-Cox é dada por:
+
+> $$ Y^{*} = \left\{\begin{array}{ll}
+  		              \frac{Y^{\lambda} - 1}{\lambda} & \mbox{ se } \lambda \neq 0 \\
+  		              \log(Y) & \mbox{ se } \lambda = 0 \\
+                    \end{array}\right., $$
+
+e portanto a transformação inversa $h^{-1}(\cdot)$ fica
+
+> $$ Y = \left\{\begin{array}{ll}
+  		          (\lambda Y^{*} + 1)^{(1/\lambda)} & \mbox{ se } \lambda \neq 0 \\
+  		          \exp{Y^{*}} & \mbox{ se } \lambda = 0 \\
+                \end{array}\right., $$
+
+o Jacobiano
+
+> $$ J = \left\{\begin{array}{ll}
+  		          (\lambda Y^{*} + 1)^{(1/\lambda)-1} & \mbox{ se } \lambda \neq 0 \\
+  		          \exp{Y^{*}} & \mbox{ se } \lambda = 0 \\
+                \end{array}\right., $$
+
+e o log-Jacobiano utilizado no cálculo da log-verossimilhança é:
+
+> $$ \log(J) = \left\{\begin{array}{ll}
+  		                (\frac{1}{\lambda}-1) \log(\lambda Y^{*} + 1) & \mbox{ se } \lambda \neq 0 \\
+  		                Y^{*} & \mbox{ se } \lambda = 0 \\
+                      \end{array}\right.. $$
+
+***
+
+# Modelos de independência condicional
+
+Esta classe é muito utilizada para modelar observações que são correlacionadas. Nesta classe de modelos, 
+assume-se que as observações $y_{i}$ são independentes dado o valor $x_{i}$ de uma variável latente.
+Desta forma a estrutura de dependência é dada assumindo-se uma distribuição multivariada para $x$, 
+tipicamente assume-se uma normal multivariada. Desta forma para um vetor $y^{*}$ de observações a densidade
+é dada por
+
+> $$ f(y^{*}) = f(x) \cdot \prod_{i=1}^{n} f(y_{i}^{*}|x_{i}) $$
+
+
+em que $f(x)$ é a distribuição multivariada que define a estrutura de dependência. A verossimilhança para
+modelos de efeitos latentes é dada pela distribuição conjunta das variáveis aleatórias (observadas e 
+latentes) integrada em relação à variável latente.
+
+> $$ L(\theta; y) = \int f_{X,Y}(x, y) {\rm d}x = \int f_{X}(x) f_{Y}(y|x) {\rm d}x
+                  = \int f_{X}(x) \prod_{i=1}^{n} f_{Y}(y_{i}|x_{i}) {\rm d}x. $$
+
+Para o modelo de variável transformada obtém-se então a verossimilhança 
+
+> $$ \begin{align*} 
+     L(\theta; y) & = \int f_{X}(x) \prod_{i=1}^{n} f_{Y^{*}}(y_{i}^{*}|x_{i}) J_{i}^{-1} {\rm d}x \\
+                  & = \left[\int f_{X}(x) \prod_{i=1}^{n} f_{Y^{*}}(y_{i}^{*}|x_{i}) {\rm d}x\right]
+                      \prod_{i=1}^{n} J_{i}^{-1} \\
+                  & = L(\theta; y^{*}) \prod_{i=1}^{n} J_{i}^{-1},
+     \end{align*} $$ 
+
+e a log-verossimilhança fica da seguinte forma:
+
+> $$ l(\theta; y) = l(\theta; y^{*}) - \sum_{i=1}^{n} J_{i}. $$
+
+Assim como anteriormente, obtém-se a verossimilhança para o modelo ajustado com a variável transformada e 
+simplesmente subtrai-se a soma dos log-Jacobianos para as observações individualmente.
+
+***
+***

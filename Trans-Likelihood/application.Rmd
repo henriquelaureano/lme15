@@ -1,0 +1,395 @@
+---
+title: "Verossimilhança para modelos com variáveis transformadas \\
+
+        - \\
+
+        Aplicação"
+author: "[Henrique Aparecido Laureano](http://lattes.cnpq.br/2224901552085090)"
+date: "Setembro de 2015"
+output:
+  rmarkdown::html_vignette:
+    fig_width: 7
+    fig_height: 4.25
+    fig_cap: TRUE
+    toc: yes
+---
+
+<style type="text/css">
+#TOC {
+  margin: 0 145px;
+}
+</style>
+
+```{r setup, include = FALSE}
+require(knitr)
+opts_chunk$set(
+    cache = TRUE,
+    cache.path = "cache/",
+    fig.path = "graphs/",
+    dpi = 100,
+    fig.align = "center",
+    comment = NA,
+    warning = FALSE,
+    error = FALSE)
+```
+
+***
+***
+
+# Packages
+
+```{r}
+pkg <- c("bbmle", # função mle2()
+         "MASS")  # função fitdistr()
+sapply(pkg, require,
+       character.only = TRUE)
+```
+
+***
+***
+
+# Conjunto de dados
+
+## Escala natural
+
+```{r}
+y <- c(5.0, 9.5, 9.8, 7.4, 18.2, 8.3, 7.0, 8.2, 7.4, 4.9,
+       12.5, 15.3, 8.9, 12.2, 22.2, 1.0, 8.9, 7.3, 4.6, 3.9)
+```
+
+## Escala transformada
+
+A transformação Box-Cox é dada por:
+
+> $$ Y^{*} = \left\{\begin{array}{ll}
+  		              \frac{Y^{\lambda} - 1}{\lambda} & \mbox{ se } \lambda \neq 0 \\
+  		              \log(Y) & \mbox{ se } \lambda = 0 \\
+                    \end{array}\right. .$$
+
+Aqui consideramos um $\lambda = 0.2$
+
+```{r}
+lambda <- .2
+# y.bc: transformação Box-Cox em y
+(y.bc <- (y**(lambda) - 1) / lambda)
+```
+
+***
+***
+
+# Ajustes
+
+## Distribuição Normal
+
+***
+
+### Função de log-verossimilhança
+
+```{r}
+# ll.n: log-verossimilhança da normal
+ll.n <- function(mu, sigma.l, y){
+  saida <- sum(dnorm(y,
+                     mean = mu,
+                     sd = exp(sigma.l),
+                     log = TRUE))
+  return(-saida)}
+```
+
+### Estimando os parâmetros e a máxima verossimilhança
+
+```{r}
+# aval.ll.n: avaliando a função de log-verossimilhança da normal
+aval.ll.n <- mle2(ll.n,
+                  start = list(mu = mean(y),
+                               sigma.l = log(sd(y))),
+                  method = "BFGS",
+                  data = list(y = y))
+```
+
+### Estimativas
+
+```{r}
+list(mu = coef(aval.ll.n)[[1]],
+     sigma = exp(coef(aval.ll.n)[[2]]))
+```
+
+#### Comparando com a função fitdistr()
+
+```{r}
+fitdistr(y, "normal")$estimate
+```
+
+### Estimativa da verossimilhança
+
+```{r}
+logLik(aval.ll.n)
+```
+
+#### Comparando com a função fitdistr()
+
+```{r}
+fitdistr(y, "normal")$loglik
+```
+
+### Intervalos de confiança (IC)
+
+```{r}
+list(mu.ic = confint(aval.ll.n,
+                     method = "quad")[1, ],
+     sigma.ic = exp(confint(aval.ll.n,
+                            method = "quad")[2, ]))
+```
+
+### Perfis de verossimilhança
+
+```{r}
+perf.n <- profile(aval.ll.n)
+plot(perf.n,
+     xlab = c(expression(mu), expression(log(sigma))))
+```
+
+#### Intervalos de confiança (IC)
+
+```{r}
+list(mu.ic = confint(perf.n)[1, ],
+     sigma.ic = exp(confint(perf.n)[2, ]))
+```
+
+## Distribuição Normal com transformação na resposta
+
+***
+
+### Estimando os parâmetros e a máxima verossimilhança
+
+```{r}
+# aval.ll.nt: avaliando a função de log-verossimilhança da normal com resposta transformada
+aval.ll.nt <- mle2(ll.n,
+                   start = list(mu = mean(y.bc),
+                                sigma.l = log(sd(y.bc))),
+                   method = "BFGS",
+                   data = list(y = y.bc))
+```
+
+### Estimativa da verossimilhança
+
+```{r}
+logLik(aval.ll.nt)
+```
+
+#### Comparando com a função fitdistr()
+
+```{r}
+fitdistr(y.bc, "normal")$loglik
+```
+
+### Tornando a verossimilhança comparável
+
+> $$ l(\theta; y) = l(\theta; y^{*}) - \sum_{i=1}^{n} \log(J_{i}), $$
+
+onde
+
+* $l(\theta; y)$ é a log-verossimilhança na escala da variável original;
+
+* $l(\theta; y^{*})$ é a log-verossimilhança do modelo ajustado com a variável transformada;
+
+* $\sum_{i=1}^{n} \log(J_{i})$ é a soma dos log-Jacobianos para as observações individuais.
+
+Aqui o log-Jacobiano utilizado é dado por:
+
+> $$ \log(J) = \left\{\begin{array}{ll}
+  		                (\frac{1}{\lambda}-1) \log(\lambda \cdot Y^{*} + 1) & \mbox{ se } \lambda \neq 0 \\
+  		                Y^{*} & \mbox{ se } \lambda = 0 \\
+                      \end{array}\right.. $$
+
+```{r}
+# J.log: log-Jacobianos 
+J.log <- (1/(lambda) - 1) * log(lambda * y.bc + 1)
+(aval.ll.nt <- logLik(aval.ll.nt) - sum(J.log))
+```
+
+## Distribuição Log-Normal
+
+***
+
+### Função de log-verossimilhança
+
+```{r}
+# ll.ln: log-verossimilhança da log-normal
+ll.ln <- function(mu.log, sigma.log, y){
+  saida <- sum(dlnorm(y,
+                      meanlog = exp(mu.log),
+                      sdlog = exp(sigma.log),
+                      log = TRUE))
+  return(-saida)}
+```
+
+### Estimando os parâmetros e a máxima verossimilhança
+
+```{r}
+# aval.ll.ln: avaliando a função de log-verossimilhança da log-normal
+aval.ll.ln <- mle2(ll.ln,
+                   start = list(mu.log = log(mean(y)),
+                                sigma.log = log(sd(y))),
+                   method = "BFGS",
+                   data = list(y = y))
+```
+
+### Estimativas
+
+```{r}
+exp(coef(aval.ll.ln))
+```
+
+#### Comparando com a função fitdistr()
+
+```{r}
+fitdistr(y, "lognormal")$estimate
+```
+
+### Estimativa da verossimilhança
+
+```{r}
+logLik(aval.ll.ln)
+```
+
+#### Comparando com a função fitdistr()
+
+```{r}
+fitdistr(y, "lognormal")$loglik
+```
+
+### Intervalos de confiança (IC)
+
+```{r}
+exp(confint(aval.ll.ln,
+            method = "quad"))
+```
+
+### Perfis de verossimilhança 
+
+```{r}
+perf.ln <- profile(aval.ll.ln)
+plot(perf.ln,
+     xlab = c(expression(log(mu)), expression(log(sigma))))
+```
+
+#### Intervalos de confiança (IC)
+
+```{r}
+exp(confint(perf.ln))
+```
+
+## Distribuição Gamma
+
+***
+
+### Função de log-verossimilhança
+
+```{r}
+# ll.g: log-verossimilhança da gamma
+ll.g <- function(forma.l, escala.l, y){
+  saida <- sum(dgamma(y,
+                      shape = exp(forma.l),
+                      scale = exp(escala.l),
+                      log = TRUE))
+  return(-saida)}
+```
+
+### Estimando os parâmetros e a máxima verossimilhança
+
+#### Como definir chutes iniciais?
+
+Vamos chamar o parâmetro de forma de $k$, e o parâmetro de escala de $\theta$.
+
+A esperança (média) e variância da variável aleatória são dados por:
+
+* $E[X] = k \cdot \theta$;
+
+* $Var[X] = k \cdot \theta^{2}$.
+
+Logo,
+
+> $$ \text{média} = k \cdot \theta \quad \rightarrow \quad \theta = \frac{\text{média}}{k} $$
+
+> $$ \text{variância} = k \cdot \theta^{2} \rightarrow
+     \text{variância} = k \cdot \left( \frac{\text{média}}{k} \right)^{2} =
+     \frac{\text{média}^{2}}{k} $$
+
+e
+
+> $$ k = \frac{\text{média}^{2}}{\text{variância}} $$
+
+```{r}
+k <- (mean(y)**2) / var(y)
+theta <- mean(y) / k
+# aval.ll.g: avaliando a função de log-verossimilhança da gamma
+aval.ll.g <- mle2(ll.g,
+                  start = list(forma.l = log(k),
+                               escala.l = log(theta)),
+                  method = "BFGS",
+                  data = list(y = y))
+```
+
+### Estimativas
+
+```{r}
+list(forma = exp(coef(aval.ll.g)[[1]]),
+     escala = exp(coef(aval.ll.g)[[2]]))
+```
+
+#### Comparando com a função fitdistr()
+
+```{r}
+fitdistr(y, "gamma")$estimate
+# A fitdistr() usa o parâmetro rate, que é igual a 1 / scale
+1 / exp(coef(aval.ll.g)[[2]])
+```
+
+### Estimativa da verossimilhança
+
+```{r}
+logLik(aval.ll.g)
+```
+
+#### Comparando com a função fitdistr()
+
+```{r}
+fitdistr(y, "gamma")$loglik
+```
+
+### Intervalos de confiança (IC)
+
+```{r}
+list(forma.ic = exp(confint(aval.ll.g,
+                            method = "quad")[1, ]),
+     escala.ic = exp(confint(aval.ll.g,
+                             method = "quad")[2, ]))
+```
+
+### Perfis de verossimilhança
+
+```{r}
+perf.g <- profile(aval.ll.g)
+plot(perf.g,
+     xlab = c("forma ( k )", expression("escala ("~theta~")")))
+```
+
+#### Intervalos de confiança (IC)
+
+```{r}
+list(forma = exp(confint(perf.g)[1, ]),
+     escala = exp(confint(perf.g)[2, ]))
+```
+
+***
+***
+
+# Pela valor da verossimilhança, qual se saiu melhor?
+
+|Normal (natural)|Normal (transformada)|Log-Normal|    Gamma|
+|:--------------:|:-------------------:|:--------:|:-------:| 
+|       -60.09614|            -59.12448| -60.40833|-58.77988|
+
+As diferenças são pequenas, mas pelo valor da verossimilhança, o melhor ajuste é obtido com a 
+distribuição Gamma, seguido da distribuição Normal (com variável transformada),  Normal (variável na 
+escala original) e Log-Normal.
