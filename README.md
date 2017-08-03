@@ -26,4 +26,6 @@ Direct link to the activities:
   - [Poisson](http://mynameislaure.github.io/emr15/mem/mixed_poisson_model.html)
   - [Piecewise](http://mynameislaure.github.io/emr15/mem/piecewise_mixed_model.html)
 
++ [Nonparametric Regression](http://mynameislaure.github.io/emr15/nonp-reg/)
+
 ***
