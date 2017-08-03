@@ -28,4 +28,8 @@ Direct link to the activities:
 
 + [Nonparametric Regression](http://mynameislaure.github.io/emr15/nonp-reg/)
 
++ Heteroscedastic Regression Models
+  - [Theory](http://mynameislaure.github.io/emr15/het-regm/theory.html)
+  - [Application](http://mynameislaure.github.io/emr15/het-regm/application.html)
+
 ***
