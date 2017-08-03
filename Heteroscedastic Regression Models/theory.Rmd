@@ -1,0 +1,135 @@
+---
+title: "REGRESSÃO HETEROCEDÁSTICA"
+author: "Henrique Aparecido Laureano [[Lattes](http://lattes.cnpq.br/2224901552085090),
+                                      [GitLab](https://gitlab.c3sl.ufpr.br/u/hal11),
+                                      [LEG GitLab](http://git.leg.ufpr.br/u/laureano)]"
+date: "Dezembro de 2015"
+output:
+  rmarkdown::html_vignette:
+    fig_cap: TRUE
+    toc: yes
+---
+
+<style type="text/css">
+#TOC {
+  margin: 0 150px;
+}
+</style>
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(cache=TRUE, cache.path="cache/", fig.path="graphs/", dpi=100, fig.align="center"
+               , comment=NA, warning=FALSE, error=FALSE, message=FALSE)
+```
+
+***
+
+> Cribari-Neto, F. & Soares, A. C. N. (2003). Inferência em Modelos Heterocedásticos. \
+  *Revista Brasileira de Economia*, 57(2):319-335
+
+***
+
+***
+
+**INTRODUÇÃO**
+
+***
+
+> **Na presença de heterocedasticidade o estimador** de mínimos quadrados ordinários (**EMQO**)
+  dos parâmetros lineares da estrutura de regressão **permanece não-viesado e consistente**
+
+> Contudo, o estimador usual da matriz de covariâncias do EMQO dos parâmetros de regressão
+  é **viesado e inconsistente quando há heterocedasticidade**
+  
+> * **não-viesado**: em média se iguala ao parâmetro verdadeiro
+  * **consistente**: converge em prababilidade para o parâmetro
+    verdadeiro à medida que o número de observações aumenta
+
+***
+
+**O MODELO E ESTIMADORES**
+
+***
+
+Modelo de regressão linear
+
+> \[ y = X \beta + u \]
+
+em que
+
+* \(y\) é um vetor \(n\) x 1 de observações da variável dependente
+
+* \(X\) é uma matriz fixa de posto
+  completo^[O posto de uma matriz é o número de linhas ou colunas linearmente independentes.
+            Uma matriz é dita ser de posto completo se o seu posto for igual a \(min(n, p)\)]
+  de dimensão \(n\) x \(p\) (\(p\) < \(n\)) contendo observações sobre as variáveis explicativas
+
+* \(\beta = (\beta_{1}, ..., \beta_{p})^{'}\) é um vetor \(p\) x 1 de parâmetros desconhecidos
+
+* \(u\) é um vetor \(n\) x 1 de distúrbios aleatórios (erros) com média zero e matriz de covariância
+  \(\Omega = {\rm diag}(\sigma_{1}^{2}, ..., \sigma_{n}^{2})\)
+
+> Quando os **erros** são **homocedásticos**, então \(\sigma_{i}^{2} = \sigma^{2} > 0\), ou seja,
+  \(\Omega = \sigma^{2}I_{n}\), em que \(I_{n}\) é a matriz identidade de ordem \(n\)
+
+**Estimador de mínimos quadrados ordinários de \(\beta\)**
+
+> \[ \hat{\beta} = (X^{'}X)^{-1}X^{'}y \]
+
+* média \(\Rightarrow \beta\), i.e., ele é **não-viesado**
+
+* variância \(\Rightarrow \Psi = (X^{'}X)^{-1}X^{'}\Omega X(X^{'}X)^{-1}\)
+
+**Sob homocedasticidade**, ou seja, \(\Omega = \sigma^{2}I_{n}\), esta expressão se simplifica a
+\(\sigma^{2}(X^{'}X)^{-1}\), podendo ser facilmente estimada como \(\hat{\sigma}^{2}(X^{'}X)^{-1}\),
+em que \(\hat{\sigma}^{2} = \hat{u^{'}}\hat{u}/(n-p)\). Aqui,
+\(\hat{u} = (I_{n} - X(X^{'}X)^{-1}X^{'})y = My\) representa o vetor \(n\) x 1
+de resíduos de mínimos quadrados
+
+> O **estimador consistente** da matriz de covariâncias **proposto pot Halbert White** em 1980
+  é o mais utilizado em aplicações práticas
+
+> \[ \hat{\Psi} = (X^{'}X)^{-1}X^{'}\hat{\Omega} X(X^{'}X)^{-1} \]
+
+em que
+
+* \(\hat{\Omega} = {\rm diag}(\hat{u}_{1}^{2}, ..., \hat{u}_{n}^{2})\)
+
+Ou seja, \(\hat{\Omega}\) é uma matriz diagonal formada a partir do vetor contendo os
+quadrados dos resíduos de mínimos quadrados
+
+Este **estimador** é **consistente quando** os **erros** são **homocedásticos e**
+quando há **heterocedasticidade de forma conhecida**
+
+No entanto, estudos revelam que o **estimador de White pode ser muito viesado em amostras finitas**
+
+Um **estimador alternativo** que geralmente possui **melhor desempenho em pequenas amostras** é construído
+a partir do estimador de White, mas incorporando a ele termos de correção. Ele é conhecido como **HC3**
+
+> \[ \hat{\Omega} = {\rm diag}(\hat{u}_{1}^{2}/(1-h_{1})^{2}, ..., \hat{u}_{n}^{2}/(1-h_{n})^{2}) \]
+
+em que
+
+* \(h_{i}\) é o i-ésimo elemento diagonal da 'matriz chapéu' \(H = X(X^{'}X)^{-1}X^{'}\), \(i = 1, ..., n\)
+
+O método **bootstrap** geralmente fornece uma **aproximação** para a estatística de interesse
+**mais precisa** do que aquela obtida a partir de sua aproximação assintótica de primeira ordem
+
+Um estimador de **bootstrap robusto ('ponderado') à presença de heterocedasticidade**
+pode ser descrito da seguinte forma
+
+1. para cada \(i\), \(i = 1, ..., n\), obtenha aleatoriamente \(t_{i}^{*}\)
+   de uma distribuição com média zero e variância um
+
+2. forme a amostra de bootstrap \(y^{*}, X\), onde
+   \(y_{i}^{*} = X_{i}\hat{\beta}+t_{i}^{*}\hat{u}_{i}/(1-h_{i})\);
+   em que \(X_{i}\) denota a \(i\)-ésima linha da matrix \(X\)
+
+3. obtenha a estimativa de MQO de \(\beta\): \(\beta^{*} = (X^{'}X)^{-1}X^{'}y^{*}\)
+
+4. repita os passos anteriores um grande número de vezes (digamos, \(B\))
+
+5. calcule a variância dos \(B+1\) vetores de estimativas obtidas usando os passos acima
+   (os \(B\) vetores obtidos do esquema de bootstrap e o vetor inicial)
+
+***

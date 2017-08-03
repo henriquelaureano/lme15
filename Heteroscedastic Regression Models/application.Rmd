@@ -1,0 +1,290 @@
+---
+title: "REGRESSÃO HETEROCEDÁSTICA"
+author: "Henrique Aparecido Laureano [[Lattes](http://lattes.cnpq.br/2224901552085090),
+                                      [GitLab](https://gitlab.c3sl.ufpr.br/u/hal11),
+                                      [LEG GitLab](http://git.leg.ufpr.br/u/laureano)]"
+date: "Dezembro de 2015"
+output:
+  rmarkdown::html_vignette:
+    fig_cap: TRUE
+    toc: yes
+---
+
+<style type="text/css">
+#TOC {
+  margin: 0 150px;
+}
+</style>
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(cache=TRUE, cache.path="cache/", fig.path="graphs/", dpi=100, fig.align="center"
+               , comment=NA, warning=FALSE, error=FALSE, message=FALSE)
+```
+
+***
+
+> Zeileis, A. (2004). Econometric Computing with HC and HAC Covariance Matrix Estimators. \
+  *Journal of Statistical Software*, 11(1):1-17
+
+***
+
+```{r packages, results='hide'}
+pkg <- c("sandwich", "lmtest", "latticeExtra", "wzRfun", "scatterplot3d", "strucchange")
+sapply(pkg, library
+       , character.only = TRUE
+       , logical.return = TRUE)
+```
+
+***
+
+# Exemplo 1: Heterocedasticidade
+
+***
+
+> Gastos per capita em escolas públicas e renda per capita por estado em 1979
+
+```{r}
+data("PublicSchools")
+(data <- PublicSchools) ; str(data)
+```
+
+> Não temos o gasto per capita para o estado de Wisconsin
+
+```{r}
+data <- na.omit(data) ; str(data)
+```
+
+```{r}
+names(data) <- c("gastos", "renda")
+```
+
+> Deixando a renda na escala de 10mil obamas
+
+```{r}
+data$renda <- data$renda * .0001
+```
+
+```{r, fig.width=6.5, fig.height=4.5}
+xyplot(gastos ~ renda, data
+       , pch = 16
+       , jitter.x = TRUE
+       , ylab = list(rot = 0)
+       , panel = panel.smoothScatter) +
+  as.layer(xyplot(data$gastos ~ data$renda, type = "g"))
+```
+
+> Iniciamos com um modelo de regressão linear de termo quadrático
+
+```{r}
+model <- lm(gastos ~ renda + I(renda^2), data)
+```
+
+> Será que o termo quadrático é realmente necessário?
+
+Testes parciais quase-t ou quase-z
+para todos os coeficientes do modelo podem ser computados com a função **coeftest**
+
+```{r}
+coeftest(model, df = Inf # df = infinito, i.e., aproximação normal é usada para computar os p-valores  
+         , vcov = vcovHC(model, type = "HC0")) # HC0 = estimador de White
+```
+
+O p-valor é um pouquinho maior que 5% - a regra é clara, arnaldo -
+a 5% de significância o termo quadrático não é significativo
+
+> E se usarmos outro estimador, o HC4 proposto pelo Cribari-Neto, por exemplo
+
+```{r}
+coeftest(model, df = Inf
+         , vcov = vcovHC(model, type = "HC4"))
+```
+
+É, o termo quadrático é claramente não significativo / desnecessário
+
+> Mas por que os p-valores diferem tanto de um estimador para o outro?
+
+```{r, fig.width=6.5, fig.height=4.5}
+pred <- predict(model
+                , newdata = data.frame(renda = seq(min(data$renda), max(data$renda)
+                                                   , length.out = 3 * nrow(data)))
+                , interval = "confidence")
+pred2 <- predict(lm(gastos ~ renda, data)
+                 , newdata = data.frame(renda = seq(min(data$renda), max(data$renda)
+                                                    , length.out = 3 * nrow(data)))
+                 , interval = "confidence")
+xyplot(gastos ~ renda, data
+       , pch = 16
+       , jitter.x = TRUE
+       , type = c("p", "g")
+       , ylab = list(rot = 0)
+       , key = list(corner = c(.05, .95), lines = list(col = c(2, 3), lwd = 2)
+                    , text = list(c("Modelo com termo quadrático", "Modelo sem termo quadrático")))) +
+  as.layer(xyplot(pred[, 1] ~ seq(min(data$renda), max(data$renda), length.out = 3 * nrow(data))
+                  , type = "l"
+                  , prepanel = prepanel.cbH
+                  , cty = "bands"
+                  , ly = pred[, 2]
+                  , uy = pred[, 3]
+                  , panel = panel.cbH
+                  , lwd = 2
+                  , col = 2)) +
+  as.layer(xyplot(pred2[, 1] ~ seq(min(data$renda), max(data$renda), length.out = 3 * nrow(data))
+                  , type = "l"
+                  , prepanel = prepanel.cbH
+                  , cty = "bands"
+                  , ly = pred2[, 2]
+                  , uy = pred2[, 3]
+                  , panel = panel.cbH
+                  , lwd = 2
+                  , col = 3))
+```
+
+Podemos observar no gráfico um outlier, ele corresponde ao estado do Alaska
+
+> A correção para pontos de alta alavancagem
+  presente no estimador HC4 é a responsável por essa diferença de p-valores
+
+***
+
+# Exemplo 2: Autocorrelação
+
+***
+
+> Uma série temporal anual de 1963 até 1982
+  do produto nacional bruto nominal (GNP - gross national product)
+  - investimento interno privado bruto nominal,
+  um índice de preços e taxa de juros que é usada para formular um modelo
+  que explica o investimento real pelo GNP real e juros real
+
+```{r}
+data("Investment")
+(data2 <- Investment)
+```
+
+```{r}
+model2 <- lm(RealInv ~ RealGNP + RealInt, data2)
+```
+
+```{r, fig.width=6.5, fig.height=4}
+xyplot(data2[, "RealInv"], type = c("b", "g")
+       , pch = 16
+       , lwd = 2
+       , xlab = NULL
+       , scales = list(y = list(rot = 0))
+       , panel = function(...){
+         panel.xyplot(...)
+         panel.lines(ts(fitted(model2), start = 1964), col = 3, lwd = 2)})
+```
+
+```{r, fig.width=6.5, fig.height=5}
+sc3 <- scatterplot3d(data2[, c(5, 7, 6)], type = "b"
+                     , angle = 65
+                     , scale.y = 1
+                     , pch = 16
+                     , lwd = 2) ; sc3$plane3d(model2, lty.box = "solid", col = "#0080ff", lwd = 2)
+```
+
+```{r}
+coeftest(model2, df = Inf
+         , vcov = NeweyWest(
+           model2 # estimador de Newey e West que propõem o uso de pesos de linear decaímento
+           , lag = 4 # específica o lag máximo
+                     # se lag = NULL (default)
+                     # um procedimento de seleção de largura de banda não paramétrico é usado
+           , prewhite = FALSE) # se TRUE usa um modelo VAR(1) (defalut)
+)                              # vetor autoregressivo de ordem 1 - nas funções de estimação
+```
+
+```{r}
+coeftest(model2, df = Inf
+         , vcov = NeweyWest) # tudo no default dela
+```
+
+> Caso você precise usar um determinado estimador HAC várias vezes em um script
+  você pode criar uma função para agilizar seu trabalho
+
+```{r}
+parzenHAC <- function(x, ...)
+  kernHAC(x, kernel = "Parzen" # kernel Parzen
+          , prewhite = 2 # VAR(2) - vetor autoregressivo de ordem 2
+          , adjust = FALSE # sem ajuste para amostras de tamanho finito
+          , bw = bwNeweyWest, ...) # estimador de Newey e West
+```
+
+> Os três estimadores geram erros padrão diferentes,
+  contudo as tomadas de decisão em relação as covariáveis é sempre a mesma
+
+```{r}
+coeftest(model2, df = Inf
+         , vcov = parzenHAC)
+```
+
+***
+
+# Exemplo 3: \
+  Heterocedasticidade e autocorrelação
+
+***
+
+> Estimadores de covariância podem ser utilizados em outras situações,
+   não apenas em testes quase-t (ou quase-z)
+
+> Série temporal trimestral da taxa de juros real ex-post dos Estados Unidos de 1961 até 1986
+
+```{r}
+data("RealInt")
+```
+
+```{r, fig.width=6.5, fig.height=5}
+plot(RealInt
+     , las = 1
+     , pch = 16
+     , lwd = 2
+     , col = "#0080ff"
+     , xlab = NULL)
+abline(v = seq(1961, 1986, length = 26), h = seq(-5, 10, length = 7), col = "gray90")
+```
+
+> **gefp**: computa o processo de flutuação M empírico a partir dos scores de um modelo ajustado
+
+```{r}
+(model3 <- gefp(RealInt ~ 1, fit = lm # ajuste de uma regressão na média
+                , vcov = kernHAC # variância estimada com a função kernHAC
+                                 # estimador HAC kernel espectral quadrático
+                                 # com VAR(1) nas funções de ligação
+                                 # e seleção de largura de banda automática
+               ))                # baseada em uma aproximação AR(1)
+```
+
+```{r, fig.width=6.5, fig.height=5}
+plot(model3, aggregate = FALSE # valores críticos à 5% em vermelho
+                               # se o processo ajustado ultrapassa a linha horizontal
+                               # existe uma mudança significativa na média
+     , xlab = "", main = NULL) # neste caso existe pelo menos uma forte quebra em torno de 1980
+```
+
+```{r}
+sctest(model3) # teste formal para tal verificação
+```
+
+```{r}
+bp <- breakpoints(RealInt ~ 1) # por default os pontos são selecionados pela partição BIC mínima
+```
+
+```{r}
+confint(bp
+        , vcov = kernHAC)
+```
+
+```{r, fig.width=6.5, fig.height=5}
+plot(RealInt
+     , las = 1
+     , pch = 16
+     , lwd = 2
+     , col = "#0080ff"
+     , xlab = NULL)
+lines(ts(fitted(bp), start = start(RealInt), frequency = 4), col = 3, lwd = 2)
+lines(confint(bp, vcov = kernHAC), col = 2, lwd = 2)
+abline(v = seq(1961, 1986, length = 26), h = seq(-5, 10, length = 7), col = "gray90")
+```
