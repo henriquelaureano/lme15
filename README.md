@@ -10,7 +10,7 @@ Professor: [Paulo Justiniano](http://leg.ufpr.br/~paulojus/)
 
 Direct link to the activities:
 
-+ Piecewise regression
++ Piecewise Regression
   - [Henrique](http://mynameislaure.github.io/emr15/piece-reg/)
   - [Eduardo](http://mynameislaure.github.io/emr15/piece-reg/piecewise.html)
 
@@ -21,5 +21,9 @@ Direct link to the activities:
     * [Theory](http://mynameislaure.github.io/emr15/translikeli/theory.html)
     * [Application](http://mynameislaure.github.io/emr15/translikeli/application.html)
   - [Eduardo](http://mynameislaure.github.io/emr15/translikeli/application-eduardojr.html)
+
++ Mixed Effects Models
+  - [Poisson](http://mynameislaure.github.io/emr15/mem/mixed_poisson_model.html)
+  - [Piecewise](http://mynameislaure.github.io/emr15/mem/piecewise_mixed_model.html)
 
 ***
