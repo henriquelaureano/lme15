@@ -14,5 +14,5 @@ Direct link to the activities:
   - [Henrique](http://mynameislaure.github.io/emr15/piece-reg/)
   - [Eduardo](http://mynameislaure.github.io/emr15/piece-reg/piecewise.html)
 
-+ [`Non-linear Models`](http://mynameislaure.github.io/emr15/nlm/)
++ [Non-linear Models](http://mynameislaure.github.io/emr15/nlm/)
 ***
