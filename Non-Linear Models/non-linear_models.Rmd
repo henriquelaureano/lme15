@@ -1,0 +1,475 @@
+---
+title: "Ajuste de modelos não lineares"
+author: "[Paulo Justiniano Ribeiro Jr](http://leg.ufpr.br/~paulojus/) \\
+         
+         [Henrique Aparecido Laureano](http://lattes.cnpq.br/2224901552085090)"
+date: "Setembro de 2015"
+output:
+  rmarkdown::html_vignette:
+    fig_width: 6.5
+    fig_height: 3.5
+    fig_cap: TRUE
+    toc: yes
+---
+
+<style type="text/css">
+#TOC {
+  margin: 0 145px;
+}
+</style>
+
+```{r setup, include = FALSE}
+require(knitr)
+opts_chunk$set(
+    cache = TRUE,
+    cache.path = "cache/",
+    fig.path = "graphs/",
+    dpi = 100,
+    fig.align = "center",
+    comment = NA,
+    warning = FALSE,
+    error = FALSE)
+```
+
+```{r, include = FALSE}
+pkg <- c("latticeExtra")
+sapply(pkg, require,
+       character.only = TRUE)
+```
+
+Modelos não lineares permitem o ajuste de relações mais complexas que relações lineares ou linearizáveis entre
+quantidades de interesse. Em muitos casos tais modelos tem a sua forma funcional específica para o problema sendo
+tratado, relacionada a algum mecanismo (biológico, físico, etc) inerente ao processo em questão.
+
+Nesta seção vamos ilustrar com dados da área de física de solos o ajuste de modelos não lineares utilizando a função
+$\texttt{nls()}$, cujo é um acrônimo para *non-linear least squares*. Esta função é bastante flexível e incorpora
+diversas opções para fazer ajustes incluindo características do modelo, tipo e controle dos algorítmos disponíveis.
+
+Diferentemente dos modelos lineares, o ajuste de modelos não lineares não permite que as expressões dos estimadores
+dos parâmetros desconhecidos do modelo sejam obtidas analiticamente sendo portanto necessário o uso de métodos
+númericos. Inicialmente mostramos um ajuste feito de forma "ingênua" (*naïve*), declarando apenas a função e valores
+iniciais. Tal procedimento, embora simples, pode se ineficiente para o uso de métodos numéricos. Entretanto, o ajuste
+com $\texttt{nls()}$ pode incorporar procedimentos que tendem a aprimorar o comportamento dos métodos numéricos tais
+como o fornecimento de funções que informem sobre a derivada do modelo sendo ajustado, inicialização automática com
+valores iniciais obtidos automaticamente, linearização parcial do modelo, além da escolha e calibragem dos algorítmos.
+O objetivo destas notas não é o de investigar todas estas opções, mas apenas fornecer os elementos iniciais para
+ilustrar a possibilidade de se obter tais resultados usando o $\texttt{R}$.
+
+***
+
+# Exemplo: o modelo de van Genutchen
+
+Este exemplo mostra o ajuste de um modelo não linear. Primeiro discutimos como efetuar um único ajuste para um
+conjunto de dados e algumas sugestões para examinar resultados. Ao final mostramos como efetuar vários ajustes de uma
+só vez de forma eficiente e extrair alguns resultados de particular interesse.
+
+O exemplo mostrado aqui foi motivado por um questão levantada pelo Prof. Álvaro Pires da Silva do Departamento de
+Ciência do Solo da ***ESALQ/USP*** e refere-se ao ajuste da equação de van Genutchen para a *curva de retenção de água
+no solo* (ou *curva de retenção de água no solo*).
+
+Informalmente falando, a equação de van Genutchen é um dos modelos matemáticos utilizados para descrever a curva
+característica de água no solo que caracteriza a armazenagem de água através de relação entre a umidade e o potencial
+matricial. Para determinação da curva característica de água o procedimento usual é o de se tomar uma amostra que é
+submetida a diferentes tensões em condições de laboratório. Para cada tensão aplicada a amostra perde parte do
+conteúdo de água e mede-se a umidade residual na amostra. A partir dos pares pontos com valores medidos de tensão e
+umidade, obtem-se a curva de retenção de água no solo que descreve a variação da umidade em função dos valores de
+tensão. O modelo de van Genutchen é dado pela seguinte equação:
+
+> $$ \theta = \theta_{R} + (\theta_{S} - \theta_{R}) \left[ \frac{1}{1 + (\alpha \Psi_{m})^{n}} \right]^{1 - (1/n)} $$
+
+em que $\Psi_{m}$ é o potencial matricial aplicado à amostra e $\theta$ é a umidade volumétrica medida na amostra. O
+parâmetros desconhecidos do modelo modelo são $\theta_{S}$ e $\theta_{R}$ que correspondem à umidade volumétrica na
+saturação e residual, respectivamente, $\alpha$ e $n$ que definem o formato da curva sendo que o primeiro representa o
+inverso do potencial de entrada de ar e o segundo é um índice da distribuição dos tamanhos de poros. Portanto são
+obtidos dados para os pares de pontos $(\Psi_{m}, \theta)$ e $(\theta_{S}, \theta_{R}, \alpha, n)$ são parâmetros
+desconhecidos a serem estimados e que caracterizam a curva de retenção.
+
+Para exemplificar o ajuste utilizamos dados cedidos pelo Prof. Álvaro que podem ser obtidos usando o comando mostrado
+a seguir. Este conjunto de dados refere-se a apenas duas amostras que são um subconjunto dos dados originais que
+contém diversas amostras. O objetivo é determinar da curva de retenção de água no solo estimada segundo modelo de van
+Genutchen para cada uma das amostras. No objeto $\texttt{cra}$ a primeira coluna ($\texttt{am}$) indica o número da
+amostra, a segunda ($\texttt{pot}$) o potencial aplicado e a terceira ($\texttt{u}$) a umidade do solo. Vemos a seguir
+que dispomos de 15 pontos medidos da curva de retenção da primeira amostra e 13 para a segunda.
+
+```{r}
+cra <- read.table("http://www.leg.ufpr.br/~paulojus/dados/cra.csv",
+                  header = TRUE,
+                  sep = ",")
+head(cra)
+cra <- transform(cra,
+                 am = as.factor(am))
+summary(cra)
+```
+
+Inicialmente vamos nos concentrar na discussão do ajuste do modelo e para isto, vamos isolar os dados referentes a uma
+única amostra.
+
+```{r}
+(cra30 <- subset(cra,
+                 am == 30))
+```
+
+No gráfico à esquerda visualizamos os dados de umidade *versus* pressão aplicada na amostra.
+
+Uma melhor visualização é obtida utilizando-se no eixo horizontal o logarítmo (base 10) dos valores das pressões
+aplicadas conforme mostrado no gráfico à direita.
+
+```{r}
+g1 <- xyplot(u ~ pot,
+             type = c("p", "g"),
+             pch = 16,
+             xlab = expression(Psi[m]),
+             ylab = list(label = expression(theta),
+                         rot = 0),
+             ylim = c(0, .35),
+             scales = list(x = list(rot = 30)),
+             cra30)
+g2 <- xyplot(u ~ log10(pot),
+             type = c("p", "g"),
+             pch = 16,
+             xlab = expression(log[10](Psi[m])),
+             ylab = list(label = expression(theta),
+                         rot = 0),
+             ylim = c(0, .35),
+             scales = list(x = list(tick.number = 6,
+                                    rot = 30)),
+             cra30)
+print(g1,
+      position = c(0, 0,
+                   .5, 1),
+      more = TRUE)
+print(g2,
+      position = c(.5, 0,
+                   1, 1))
+```
+
+Portanto, os dados nas colunas $\texttt{u}$ e $\texttt{pot}$ do objeto de dados correspondem à $\theta$ e $\Psi_{m}$,
+e as demais quantidades $(\theta_{R},\theta_{S}, n, \alpha)$ são parâmetros (coeficientes) a serem estimados a partir
+do ajuste do modelo teórico aos dados. Este é um modelo não linear e pode ser ajustado utilizando o método de mínimos
+quadrados conforme implementado na $\texttt{nls()}$.
+
+A função possui três argumentos obrigatórios: (i) o primeiro é utilizado para declarar a expressão do modelo a ser
+ajustado, (ii) o segundo informa o objeto contendo o conjunto de dados cujas nomes das colunas relevantes devem ter o
+mesmo nome utilizado na declaração do modelo e, (iii) valores iniciais para os parâmetros a serem ajustados que devem
+ser passados por uma *named list*, isto é, uma lista com nomes dos elementos, e estes nomes também devem coincidir com
+os utilizados na declaração do modelo. Há argumentos adicionais para controlar o comportamento algorítimo, tal como
+critério de convergência. A documentação de $\texttt{nls()}$ fornece mais detalhes.
+
+A escolha dos valores iniciais é crucial e pode influenciar nos resultados do ajuste utilizando métodos numéricos,
+especialmente em exemplos como este com um pequeno número de dados. Os valores iniciais para $\theta_{S}$ e
+$\theta_{R}$ foram escolhidos inspecionando-se o gráfico e considerando a interpretação destes como valores de
+saturação e residual de umidade, portanto, considerando-se máximos e mínimos assintóticos para a função. A escolha de
+valores iniciais para os demais parâmetros é menos óbvia. Uma das formas de se obter tais valores é efetuar um ajuste
+aproximado, visual por tentativa e erro, traçando-se curvas sobre o gráfico dos dados. O comando a seguir ilustra como
+fazer tal procedimento a partir do gráfico dos dados originais mostrado anteriormente definindo uma expressão com o
+modelo de van Genutchen. Os valores foram escolhidos após uma séria de tentativas.
+
+```{r, fig.width = 4.5}
+xyplot(u ~ pot,
+             type = c("p", "g"),
+             pch = 16,
+             xlab = expression(Psi[m]),
+             ylab = list(label = expression(theta),
+                         rot = 0),
+             ylim = c(0, .35),
+             scales = list(x = list(rot = 30)),
+             cra30) +
+  layer(panel.curve(.05 + (.35 - .05) / ( (1 + (.1 * x) ^ 1.3) ^ (1 - 1 / 1.3) ),
+                    lty = 2))
+```
+
+Definidos os valores iniciais prossegue-se com o ajuste do modelo conforme os comandos a seguir.
+
+```{r}
+fit30 <- nls(u ~ ur + (us - ur) / ( (1 + (alpha * pot) ^ n) ^ (1 - 1 / n) ),
+             start = list(us = .35,
+                          ur = .05,
+                          alpha = .1,
+                          n = 1.3),
+             data = cra30)
+summary(fit30)
+```
+
+A partir do modelo ajustado pode-se calcular quantidades de interesse. Neste particular exemplo calculamos uma
+quantidade de interesse prática denotada por $S$ que é um indicador da qualidade física do solo. Quanto maior o valor
+de $S$, melhor a sua qualidade física.
+
+```{r}
+(S <- with(as.list(coefficients(fit30)),
+           abs((- n * (us - ur) * ( ( (2 * n - 1) / (n - 1) ) ^ (1 / n - 2) ) ))))
+```
+
+Os valores preditos são obtidos de forma direta com $\texttt{fitted(fit30)}$ ou $\texttt{predict(fit30)}$. Para
+visualização e avaliação do modelo ajustado podemos fazer diferentes gráficos. A Figura abaixo mostra os pontos
+ajustados no gráfico da esquerda, e a união destes pontos no gráfico da direita. Gráficos de resíduos semelhantes aos
+obtidos para avaliar ajuste de modelos lineares podem e devem também ser investivados em uma análise. Neste exemplo
+mostramos o *qq-plot* dos resíduos e o gráfico dos resíduos *versus* valores preditos.
+
+```{r, fig.width = 10, fig.height = 7.5, out.extra = 'style = "margin:0 -155px"'}
+g1 <- xyplot(u ~ log10(pot),
+             type = c("p", "g"),
+             pch = 16,
+             cex = .8,
+             xlab = expression(log[10](Psi)),
+             ylab = list(label = expression(theta(Umidade, g/g)),
+                         rot = 0),
+             scale = list(x = list(tick.number = 6)),
+             cra30,
+             key = list(corner = c(1, .97),
+                        text = list(c("observado", 
+                                      "ajustado")),
+                        points = list(col = c("dodgerblue2", 2), 
+                                      cex = .8,
+                                      pch = c(16, 3)))) +
+  as.layer(xyplot(fitted(fit30) ~ log10(pot),
+                  col = 2,
+                  pch = 3,
+                  cex = .8,
+                  cra30))
+g2 <- xyplot(u ~ log10(pot),
+             type = c("p", "g"),
+             pch = 16,
+             cex = .8,
+             xlab = expression(log[10](Psi[m])),
+             ylab = list(label = expression(theta(Umidade, g/g)),
+                         rot = 0),
+             scale = list(x = list(tick.number = 6)),
+             cra30,
+             key = list(corner = c(1, .97),
+                        text = list(c("observado", 
+                                      "ajustado")),
+                        points = list(col = c("dodgerblue2", 2), 
+                                      cex = .8,
+                                      pch = c(16, 3)))) +
+  as.layer(xyplot(fitted(fit30) ~ log10(pot),
+                  type = "b",
+                  col = 2,
+                  pch = 3,
+                  cex = .8,
+                  cra30))
+rs <- residuals(fit30)
+g3 <- qqmath(rs,
+             type = c("p", "g"),
+             pch = 16,
+             xlab = "Quantis teóricos",
+             ylab = list(label = "Quantis \n amostrais",
+                         rot = 0)) +
+  layer(panel.qqmathline(rs,
+                         col = "dodgerblue2"))
+g4 <- xyplot(rs ~ fitted(fit30),
+             type = c("p", "g"),
+             pch = 16,
+             cex = .8,
+             xlab = "Valores ajustados",
+             ylab = list(label = "Resíduos",
+                         rot = 0)) +
+  layer(panel.abline(h = 0,
+                     col = "navy",
+                     lwd = 1.5))
+print(g1,
+      position = c(0, .5,
+                   .5, 1),
+      more = TRUE)
+print(g2,
+      position = c(.5, .5,
+                   1, 1),
+      more = TRUE)
+print(g3,
+      position = c(0, 0,
+                   .5, .5),
+      more = TRUE)
+print(g4,
+      position = c(.5, 0,
+                   1, .5))
+```
+
+Para obter uma melhor visualização do modelo ajustado pode-se obter valores na curva ajustada não apenas nos pontos
+observados, mas em uma sequência de valores ao longo do gráfico como ilustrado a seguir. A Figura à esquerda mostra o
+modelo definido pelos valores iniciais e o modelo ajustado na escala original. Note que neste exemplo em geral
+prefere-se a visualização na escala logarítmica do potencial conforme o gráfico da direita. A curva com o modelo
+ajustado a serem desenhadas sobre o gráfico dos dados são obtidas com comandos a seguir.
+
+```{r, fig.width = 7, fig.height = 3.5}
+pp <- 10 ^ seq(1, 4.5,
+               length.out = 201)
+g1 <- xyplot(u ~ pot,
+             type = c("p", "g"),
+             pch = 16,
+             xlab = expression(Psi[m]),
+             ylab = list(label = expression(theta),
+                         rot = 0),
+             ylim = c(0, .35),
+             scales = list(x = list(rot = 30)),
+             key = list(corner = c(1, .97),
+                        text = list(c("valores iniciais",
+                                      "valores ajustados")),
+                        lines = list(col = c(1, "dodgerblue2"), 
+                                     lty = 2:1)),
+             cra30) +
+  layer(panel.curve(.05 + (.35 - .05) / ( (1 + (.1 * x) ^ 1.3) ^ (1 - 1 / 1.3) ),
+                    lty = 2)) +
+  layer(panel.lines(pp, predict(fit30, list(pot = pp))))
+g2 <- xyplot(u ~ log10(pot),
+             type = c("p", "g"),
+             pch = 16,
+             cex = .8,
+             xlab = expression(log[10](Psi[m])),
+             ylab = list(label = expression(theta),
+                         rot = 0),
+             scale = list(x = list(tick.number = 6,
+                                   rot = 30)),
+             cra30) +
+  layer(panel.lines(log10(pp), predict(fit30, list(pot = pp))))
+print(g1,
+      position = c(0, 0,
+                   .5, 1),
+      more = TRUE)
+print(g2,
+      position = c(.5, 0,
+                   1, 1))
+```
+
+> Comentários: é importante lembrar que certos modelos não lineares são *parcialmente linearizáveis* e neste caso o
+  ajuste pode ser mais preciso e numericamente estável se beneficiando disto para reduzir a dimensão do problema de
+  otimização numérica. Para isto é necessário redefinir a especicifação do modelo e utilizar o argumento
+  $\texttt{method= " plinear"}$ na $\texttt{nls()}$. Neste exemplo em particilar pode-se considerar fazer o ajuste na
+  escala de $log_{10}(\Psi_{m})$ já que os resultados são tipicamente visualizados desta forma. Isto reduz a escala dos
+  valores das variáveis e também torna o problema mais estável numericamente. Por outro lado, em geral
+  reparametrizações podem mudar a interpretação de alguns parâmetros de modelo. Finalmente cuidados usuais com ajuste
+  de modelos utilizando métodos iterativos devem ser observados, tais como sensibilidade a valores iniciais e
+  verificação de convergência do algorítmo numérico.
+
+***
+
+# Ajustando um modelo a vários conjuntos de dados
+
+Vamos considerar uma situação comum na prática onde em geral tem-se várias amostras para as quais deseja-se fazer
+ajustes individuais como ilustrado anteriormente. É portanto conveniente que isto seja feito de forma automática, sem a
+necesidade de repetir os passos acima a cada ajuste. Neste exemplo vamos considerar duas amostras, mas o procedimento
+demostrado a seguir é geral e funcionará igualmente para um maior número de amostras.
+
+Serão mostradas duas soluções. Nesta sessão o ajuste é feito para cada amostra individualmente automatizando várias
+chamadas da função $\texttt{nls()}$ através do $\texttt{lapply()}$ emulando o comportamento das várias chamadas em um
+*loop*. Na próxima sessão será mostrado como obter os todos os ajustes com uma única chamada da $\texttt{nls()}$.
+Ilustramos ambos os casos porque a forma mais adequada vai depender de situação em questão e dos objetivos da análise.
+
+Começamos definindo uma função que contém uma chamada da $\texttt{nls()}$, como acima. Nesta função estamos incluindo
+um argumento $\texttt{ini}$ para passar valores iniciais que caso não fornecido assumirá os valores indicados. A seguir
+utilizamos a função $\texttt{by()}$ para proceder o ajuste para cada amostra individualmente. Esta função retorna uma
+lista com dois elementos, um para cada amostra, sendo que cada um deles contém o ajuste do modelo não linear.
+
+```{r}
+fit.vG <- function(x, ini = list(us = .3,
+                                 ur = .02,
+                                 alpha = .05,
+                                 n = 1.3))
+  nlsfit <- nls(u ~ ur + (us - ur) / (1 + (alpha * pot) ^ n) ^ (1 - 1 / n),
+                start = ini,
+                data = x)
+allfits <- by(cra, cra$am, fit.vG)
+names(allfits)
+```
+
+Neste caso, o objeto resultante $\texttt{allfits}$ é uma *lista de listas* e portanto podemos usar funções como
+$\texttt{lapply()}$, $\texttt{sapply()}$ ou similares para extrair resultados de interesse. Note que a primeira retorna
+sempre uma lista, enquanto que a segunda "simplifica" o objeto resultante se possível. Por exemplo, quando extraindo
+coeficientes a função retorna uma matrix 4 × 2, já que para cada uma das duas amostras são extraidos quatro
+coeficientes.
+
+```{r}
+lapply(allfits, summary)
+```
+
+```{r}
+lapply(allfits, coef)
+```
+
+```{r}
+sapply(allfits, coef)
+```
+
+Quando ajustamos o modelo apenas para uma das amostras mostramos como calcular o índice $S$ de qualidade física do solo
+a partir dos coeficientes estimados. Vamos então aqui obter este índice para cada uma das amostras. Para isto
+simplesmente definimos uma função que recebe o modelo ajustado e usa os coeficiente para calcular o valor de $S$.
+Passamos o objeto (lista) contendo todos os ajustes e a função que calcula $S$ para $\texttt{sapply()}$ que neste caso
+vai simplificar o resultado para formato de um vetor, já que a função calculaS retorna um escalar para cada amostra.
+
+```{r}
+calculaS <- function(fit)
+  with(as.list(coef(fit)), abs((- n * (us - ur) * ( ( (2 * n - 1) / (n - 1) ) ^ (1 / n - 2) ))))
+(Sall <- sapply(allfits, calculaS))
+```
+
+Finalmente, para encerrar este exemplo, vamos mostrar uma possível forma de combinar a visualização dos ajustes em um
+único gráfico. Começamos definindo uma sequência de valores para os quais queremos visualizar os ajustes. Armazenamos
+os valores preditos para cada amostra no objeto $\texttt{allpred}$ e optamos aqui por mostrar os ajustes para as duas
+amostras no mesmo gráfico.
+
+```{r, fig.width = 5.5}
+lpsimax <- with(cra, max(log(pot)))
+pp <- 10 ^ seq(1, lpsimax,
+               length.out = 501)
+allpred <- lapply(allfits, predict, list(pot = pp))
+xyplot(u ~ log10(pot),
+       type = c("n", "g"),
+       xlab = expression(log[10](Psi)),
+       ylab = list(label = expression(theta(Umidade, g/g)),
+                   rot = 0),
+       scale = list(x = list(tick.number = 6)),
+       cra) +
+  layer(with(cra, panel.text(log10(pot), u, as.character(am), cex = .75))) +
+  layer(lapply(allpred, function(yp)
+    llines(log10(pp), yp)))
+```
+
+***
+
+# Combinando ajustes
+
+Na sessão anterior obtivemos o ajusta para cada amostra separadamente fazendo várias chamadas à função
+$\texttt{nls()}$. Isto pode ser adequado quando deseja-se de fato ajustes individuais e se, por um lado são efetuadas
+várias chamadas à função, por outro o número de dados em cada uma delas é pequeno. Uma forma alternativa de obter
+parâmetros para cada amostra, e talvez mais eficiente que a mostrada anteriormente é discutida a seguir.
+
+Nesta sessão vamos considerar fazer todos os ajustes de só vez, isto é em uma única chamada da $\texttt{nls()}$ que
+portanto vai utilizar todos os dados de todas as amostras. Além do aspecto computacional, isto pode ser interessante
+pois permite comparar e testar hipóteses para escolha entre diferentes modelos alternativos para explicar os dados.
+Exemplificamos tal procedimento a seguir iniciando com um modelo para cada amostra e comparando com um modelo que
+assume que os parâmetros $(\alpha, n)$ são comuns entre as amostras. Neste caso interpreta-se que cada amostra informa
+sobre os respectivos valores para $(\theta_{S}, \theta_{R})$ enquanto que todas as amostras conjuntamente informam
+sobre $(\alpha, n)$. Após ajustar os modelos "candidatos" podemos fazer uma comparação formal dos ajustes através da
+$\texttt{anova()}$, o que não seria possível ajustando os modelos separadamente como mostrado sessão anterior. Os dois
+ajustes são mostrados a seguir, o seletor $[]$ é usado para indicar que os dados são tratados em grupos definidos por
+$\texttt{am}$. No caso do modelo com parâmetros distintos informamos oito valores iniciais para os parâmetros.
+
+```{r}
+(mod0 <- nls(u ~ ur[am] + (us[am] - ur[am]) * ( 1 / ( 1 + (alpha[am] * pot) ^ n[am] ) ) ^ (1 - 1 / n[am]),
+             start = list(us = c(.3, .3),
+                          ur = c(0, 0),
+                          alpha = c(.04, .04),
+                          n = c(1.25, 1.25)),
+             cra))
+```
+
+Para ajuste assumindo valores comuns para os parâmetros $\alpha$ e $n$ não utilizamos o indicados de grupos para estes
+parâmetros e informamos apenas um valor inicial para cada um deles.
+
+```{r}
+(mod1 <- nls(u ~ ur[am] + (us[am] - ur[am]) * ( 1 / ( 1 + (alpha * pot) ^ n ) ) ^ ( 1 - 1 / n ),
+             start = list(us = c(.3, .3),
+                          ur = c(0, 0),
+                          alpha = .04,
+                          n = 1.25),
+             cra))
+```
+
+Neste exemplo temos então um modelo inicial com oito e outro mais parcimonioso com apenas seis parâmetros e utilizamos
+um teste formal para orientar a escolha de modelo, que neste caso indica que o modelo mais parcimonioso com parâmetros
+comuns explica os dados satisfatóriamente.
+
+```{r}
+anova(mod1, mod0)
+```
+
+***
+***
