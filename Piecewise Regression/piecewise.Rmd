@@ -1,0 +1,987 @@
+---
+title: "*Piecewise Regression*"
+author: "[Henrique Aparecido Laureano](http://lattes.cnpq.br/2224901552085090)"
+date: "Agosto de 2015"
+output:
+  rmarkdown::html_vignette:
+    fig_width: 5
+    fig_height: 3.5
+    fig_cap: TRUE
+    toc: yes
+---
+
+<style type="text/css">
+#TOC {
+  margin: 0 130px;
+  width: 425px;
+}
+</style>
+
+```{r setup, include = FALSE}
+require(knitr)
+opts_chunk$set(
+    cache = TRUE,
+    cache.path = "cache/",
+    fig.path = "graphs/",
+    dpi = 100,
+    fig.align = "center",
+    comment = NA,
+    warning = FALSE,
+    error = FALSE)
+```
+
+***
+
+# O que é uma ***Piecewise Regression***?
+
+> Quando analisamos o relacionamento entre uma resposta, $y$, e uma covariável, $x$, pode ser aparente que 
+para diferentes intervalos de $x$, diferentes relações lineares ocorram. Nesses casos, um único modelo 
+linear pode não fornecer uma adequada descrição e um modelo não linear pode também não ser apropriado.
+
+> ***Piecewise linear regression*** (*ou* ***Regressão Linear por Partes***) é uma forma de regressão que 
+permite o ajuste de múltiplos modelos lineares aos dados para diferentes intervalos de $x$.
+
+> Pontos de quebra (**breakpoints**) são os valores de $x$ onde a inclinação da função linear muda. O valor
+do ponto de quebra pode ou não ser conhecido antes da análise, tipicamente sendo desconhecido e 
+consequentemente, estimado.^[Informações traduzidas de: [`A Tutorial on the Piecewise Regression Approach 
+Applied to Bedload Transport Data`](http://www.fs.fed.us/rm/pubs/rmrs_gtr189.pdf)]
+
+Na figura abaixo temos um comportamento que exemplifica a necessidade da utilização deste tipo de modelo.
+
+```{r fig.cap = "Ilustração de comportamento condizente com o ajuste de um modelo de regressão por partes"}
+pkg <- c("segmented",
+         "latticeExtra",
+         "RSADBE")
+sapply(pkg, require,
+       character.only = TRUE)
+data(down)
+xyplot(log(cases/births) ~ age,
+       pch = 16,
+       jitter.x = TRUE,
+       type = c("p", "g"),
+       scales = list(x = list(draw = FALSE),
+                     y = list(draw = FALSE)),
+       xlab = "x",
+       ylab = list(label = "y",
+                   rot = 0),
+       down)
+```
+
+## Qual é a cara do modelo?
+
+Existem diversas formas de escrever o modelo, ao percorrer este documento você irá se deparar com mais 
+algumas.
+
+Usualmente o modelo é escrito da seguinte maneira (considerando um único ponto de quebra, $\theta$):
+
+> $$ \begin{align}
+y = \beta_{0} + \beta_{1} x , & \quad x \leq \theta \\
+y = \beta_{0} + \beta_{2} x + \theta (\beta_{1}-\beta_{2}), & \quad x > \theta
+\end{align} $$
+
+Quando a covariável, $x$, é menor ou igual ao ponto de quebra, $\theta$, temos uma reta, 
+$\beta_{0} + \beta_{1} x$. Quando a covariável é maior que $\theta$, temos uma nova reta, 
+$\beta_{0} + \beta_{2} x + \theta (\beta_{1}-\beta_{2})$, começando no ponto de quebra e com uma nova 
+inclinação.
+
+***
+
+# Ponto de quebra conhecido:
+
+## Um ponto de quebra, o que fazer?{#umponto}
+
+Como exemplo é utilizado um conjunto de dados^[O conjunto de dados analisado está disponível na seguinte 
+página da [`Penn State University`](https://onlinecourses.science.psu.edu/stat501/node/310)].
+
+> Uma companhia de eletrônicos periodicamente realiza grandes importações de peças utilizadas em seus 
+produtos. O tamanho dos carregamentos varia de acordo com a produção/demanda. O conjunto de dados contém 
+informações do custo ($y$) de manejo dos carregamentos até um depósito (em milhares de dólares) e o tamanho
+($x_{1}$) dos carregamentos (em milhares de peças).
+
+Com base numa gráfico de dispersão foi escolhido como ponto de quebra $x = 250$.
+
+Quando o ponto de quebra é conhecido, o modelo de regressão linear por partes pode ser formulado da 
+seguinte maneira:
+
+> $$ \begin{align}
+y_{i} & = \beta_{0} + \beta_{1} x_{1i} + \beta_{2} (x_{1i} - 250) x_{2i} + \epsilon_{i}, \quad 
+\text{alternativamente:} \\
+y_{i} & = \beta_{0} + \beta_{1} x_{1i} + \beta_{2} x_{2i}^{*} + \epsilon_{i}, \text{onde}
+\end{align} $$
+
+* $y_{i}$ é o custo de manejo para cada carregamento $i$;
+* $x_{1i}$ é o tamanho de cada carregamento $i$;
+* $x_{2i}$ é uma variável *dummy* ($0$, se $x_{1i} \leq 250$, e $1$, se $x_{1i} > 250$) de cada 
+  carregamento $i$;
+* $x_{2i}^{*}$ denota $(x_{1i} - 250) x_{2i}$.
+
+Foram ajustados dois modelos, um modelo de regressão linear simples é um modelo de regressão linear por 
+partes.
+
+```{r fig.width = 6.5, fig.height = 4.5, fig.cap = "Ajuste do modelo de regressão linear simples e do modelo de regressão linear por partes ao conjunto de dados dos carregamentos"}
+path <- "~/Dropbox/CE092 - 2015-2/Alunos/Henrique/Piecewise Regression/shipment.txt"
+data <- read.table(path,
+                   header = TRUE)
+m0 <- lm(y ~ x1,
+         data)
+coef.m0 <- coefficients(m0)
+attr(coef.m0, "names") <- c("beta0", "beta1")
+data$x2 <- with(data,
+                ifelse(x1 <= 250, 0, x1 - 250))
+m1 <- lm(y ~ x1 + x2,
+         data)
+coef.m1 <- coefficients(m1)
+attr(coef.m1, "names") <- c("beta0", "beta1", "beta2")
+xyplot(y ~ x1,
+       pch = 16,
+       jitter.x = TRUE,
+       type = c("p", "g"),
+       xlab = expression(x[1]),
+       ylab = list(label = "y",
+                   rot = 0),
+       scales = list(y = list(tick.number = 8)),
+       xlim = c(100, 425),
+       ylim = c(7, 16),
+       key = list(space = "right",
+                  title = "Regressão Linear",
+                  cex.title = 1.15, 
+                  text = list(c("Simples", "por Partes")), 
+                  lines = list(col = c(3, 6), 
+                               lwd = 2)),
+       data) +
+  layer(with(as.list(coef.m0),
+             panel.curve(beta0+beta1*x,
+                         col = 3,
+                         lwd = 2))) +
+  layer(with(as.list(coef.m1),
+             panel.curve(beta0+{beta1*x}*(x <= 250)+{beta1*x+beta2*(x-250)}*(x > 250),
+                         col = 6,
+                         lwd = 2)))
+```
+
+Pela retas ajustadas, a impressão que fica é que o ajuste da regressão por partes se saiu muito melhor, 
+dado sua proximidade aos pontos observados.
+
+```{r fig.width = 12.5, fig.height = 2.75, fig.cap = "Análise de resíduos do modelo de regressão linear simples. (a) Verificação da qualidade do ajuste do modelo; (b) Verificação do pressuposto de ausência de relação média - variância; (c) Verificação do pressuposto de normalidade", out.extra = 'style = "margin:0 -280px"'}
+r.m0 <- residuals(m0,
+               type = "pearson")
+f.m0 <- fitted(m0)
+ar.1 <- xyplot(r.m0 ~ f.m0,
+               type = c("p", "g"),
+               pch = 16,
+               jitter.x = TRUE,
+               xlab = "Valores ajustados",
+               ylab = list(label = "Resíduos \n de Pearson",
+                           rot = 0),
+               main = "(a) Ajuste do modelo",
+               panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(f.m0, r.m0,
+                             lwd = 2,
+                             col = 2)})
+ar.2 <- xyplot(sqrt(abs(r.m0)) ~ f.m0,
+               type = c("p", "g"),
+               pch = 16,
+               jitter.x = TRUE,
+               xlab = "Valores ajustados",
+               ylab = list(label = expression(sqrt(abs(atop("Resíduos", "de Pearson")))),
+                           rot = 0),
+               main = "(b) Relação média - variância",
+               panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(f.m0, sqrt(abs(r.m0)),
+                             lwd = 2,
+                             col = 2)})
+ar.3 <- qqmath(r.m0,
+               type = c("p", "g"),
+               pch = 16,
+               xlab = "Quantis teóricos",
+               ylab = list(label = "Quantis \n amostrais",
+                           rot = 0),
+               main = "(c) Normalidade")
+print(ar.1,
+      position = c(0, 0,
+                   1/3, 1),
+      more = TRUE)
+print(ar.2,
+      position = c(1/3, 0,
+                   2/3, 1),
+      more = TRUE)
+print(ar.3,
+      position = c(2/3, 0,
+                   1, 1))
+```
+
+Pelos três gráficos acima mostrados, vemos uma clara não adequação aos pressupostos (a) e (b).
+
+Nos três gráficos abaixo temos a análise de resíduos para o modelo de regressão por partes. Ela também não
+se mostra muito boa, contudo, está bem melhor do que no caso da regressão linear simples. Também deve ser
+levado em consideração o tamanho da amostra, que é composta por apenas 10 observações.
+
+```{r fig.width = 12.5, fig.height = 2.75, fig.cap = "Análise de resíduos do modelo de regressão linear por partes. (a) Verificação da qualidade do ajuste do modelo; (b) Verificação do pressuposto de ausência de relação média - variância; (c) Verificação do pressuposto de normalidade", out.extra = 'style = "margin:0 -280px"'}
+r.m1 <- residuals(m1,
+               type = "pearson")
+f.m1 <- fitted(m1)
+ar.1 <- xyplot(r.m1 ~ f.m1,
+               type = c("p", "g"),
+               pch = 16,
+               jitter.x = TRUE,
+               xlab = "Valores ajustados",
+               ylab = list(label = "Resíduos \n de Pearson",
+                           rot = 0),
+               main = "(a) Ajuste do modelo",
+               panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(f.m1, r.m1,
+                             lwd = 2,
+                             col = 2)})
+ar.2 <- xyplot(sqrt(abs(r.m1)) ~ f.m1,
+               type = c("p", "g"),
+               pch = 16,
+               jitter.x = TRUE,
+               xlab = "Valores ajustados",
+               ylab = list(label = expression(sqrt(abs(atop("Resíduos", "de Pearson")))),
+                           rot = 0),
+               main = "(b) Relação média - variância",
+               panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(f.m1, sqrt(abs(r.m1)),
+                             lwd = 2,
+                             col = 2)})
+ar.3 <- qqmath(r.m1,
+               type = c("p", "g"),
+               pch = 16,
+               xlab = "Quantis teóricos",
+               ylab = list(label = "Quantis \n amostrais",
+                           rot = 0),
+               main = "(c) Normalidade")
+print(ar.1,
+      position = c(0, 0,
+                   1/3, 1),
+      more = TRUE)
+print(ar.2,
+      position = c(1/3, 0,
+                   2/3, 1),
+      more = TRUE)
+print(ar.3,
+      position = c(2/3, 0,
+                   1, 1))
+```
+
+## Mais de um ponto de quebra, o que fazer?
+
+### Exemplo
+
+Quando existe mais de um ponto de quebra, o procedimento empregado é o mesmo.
+
+No exemplo aqui considerado existem dois pontos de quebra, $15$ e $30$. O modelo fica expresso da seguinte
+forma:
+
+> $$ y_{i} = \beta_{0} + \beta_{1} x_{i} + \beta_{2} (x_{i} - 15)_{+} + \beta_{3} (x_{i} - 30)_{+} + 
+  \epsilon_{i}, \quad  \epsilon_{i} \overset{\text{iid}}{\sim} \text{N}(0, \sigma^{2}) $$
+
+```{r fig.width = 6, fig.height = 4.25, fig.cap = "Ajuste do modelo de regressão linear por partes ao conjunto de dados"}
+data("PW_Illus")
+data <- PW_Illus
+names(data) <- c("x1", "y")
+data$x2 <- with(data,
+                ifelse(x1 <= 15, 0, x1 - 15))
+data$x3 <- with(data,
+                ifelse(x1 <= 30, 0, x1 - 30))
+m0 <- lm(y ~ x1+x2+x3,
+         data)
+coef.m0 <- coefficients(m0)
+attr(coef.m0, "names") <- c("beta0", "beta1", "beta2", "beta3")
+xyplot(y ~ x1,
+       pch = 16,
+       jitter.x = TRUE,
+       type = c("p", "g"),
+       xlab = expression(x[1]),
+       ylab = list(label = "y",
+                   rot = 0),
+       scales = list(x = list(tick.number = 11),
+                     y = list(tick.number = 9)),
+       data) +
+  layer(with(as.list(coef.m0),
+             panel.curve(beta0+{beta1*x}*(x <= 15)+
+                         {beta1*x+beta2*(x-15)}*(x > 15 & x <= 30)+
+                         {beta1*x+beta2*(x-15)+beta3*(x-30)}*(x > 30),
+                         col = 6,
+                         lwd = 2)))
+```
+
+No intervalo $[.5; 15]$ temos o modelo:
+
+> $$ y_{i} = \beta_{0} + \beta_{1} x_{i} + \epsilon_{i}. $$
+
+No intervalo $(15; 30]$ temos o modelo:
+
+> $$ y_{i} = \beta_{0} + \beta_{1} x_{i} + \beta_{2} (x_{i} - 15) + \epsilon_{i}. $$
+
+No intervalo $(30; 50]$ temos o modelo:
+
+> $$ y_{i} = \beta_{0} + \beta_{1} x_{i} + \beta_{2} (x_{i} - 15) + \beta_{3} (x_{i} - 30) + 
+  \epsilon_{i}. $$
+
+```{r fig.width = 12.5, fig.height = 2.75, fig.cap = "Análise de resíduos do modelo de regressão linear por partes. (a) Verificação da qualidade do ajuste do modelo; (b) Verificação do pressuposto de ausência de relação média - variância; (c) Verificação do pressuposto de normalidade", out.extra = 'style = "margin:0 -280px"'}
+r.m0 <- residuals(m0,
+               type = "pearson")
+f.m0 <- fitted(m0)
+ar.1 <- xyplot(r.m0 ~ f.m0,
+               type = c("p", "g"),
+               pch = 16,
+               jitter.x = TRUE,
+               xlab = "Valores ajustados",
+               ylab = list(label = "Resíduos \n de Pearson",
+                           rot = 0),
+               main = "(a) Ajuste do modelo",
+               panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(f.m0, r.m0,
+                             lwd = 2,
+                             col = 2)})
+ar.2 <- xyplot(sqrt(abs(r.m0)) ~ f.m0,
+               type = c("p", "g"),
+               pch = 16,
+               jitter.x = TRUE,
+               xlab = "Valores ajustados",
+               ylab = list(label = expression(sqrt(abs(atop("Resíduos", "de Pearson")))),
+                           rot = 0),
+               main = "(b) Relação média - variância",
+               panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(f.m0, sqrt(abs(r.m0)),
+                             lwd = 2,
+                             col = 2)})
+ar.3 <- qqmath(r.m0,
+               type = c("p", "g"),
+               pch = 16,
+               xlab = "Quantis teóricos",
+               ylab = list(label = "Quantis \n amostrais",
+                           rot = 0),
+               main = "(c) Normalidade")
+print(ar.1,
+      position = c(0, 0,
+                   1/3, 1),
+      more = TRUE)
+print(ar.2,
+      position = c(1/3, 0,
+                   2/3, 1),
+      more = TRUE)
+print(ar.3,
+      position = c(2/3, 0,
+                   1, 1))
+```
+
+Pelos três gráficos de análise de resíduos acima mostrados, vemos uma adequação razoável aos pressupostos.
+
+### Mais um exemplo^[Este exemplo foi retirado do material [`Exempo Regressão por Partes`](http://www.estatistica.br/~giapaula/slides_exemplo_bateria.pdf) do Professor Gilberto A. Paula]
+
+O conjunto de dados aqui estudo é do livro do *Montgomery, Peck e Vining, 2001, Seção 7.2.2*^[Montgomery, 
+D. C.; Peck, E. A. e Vining, G. G. (2001). *Introduction to Linear Regression Analysis, Third Edition*. 
+Hoboken: Wiley.].
+
+> O dado consiste num experimento em que a queda de tensão da bateria (em voltagem) de um motor de míssil
+guiado é observada ao longo do tempo (em segundos). A queda de tensão da bateria foi observada em 41
+instantes da trajetória do míssil.
+
+Foi considerado dois pontos de quebra, $6.5$ e $30$ segundos. O modelo fica expresso da seguinte forma:
+
+> $$ y_{i} = \beta_{0} + \beta_{1} x_{i} + \beta_{2} x_{i}^{2} + \beta_{3} x_{i}^{3} + \beta_{4} 
+  (x_{i} - 6.5)_{+}^{3} + \beta_{5} (x_{i} - 13)_{+}^{3} + \epsilon_{i}, \quad  \epsilon_{i} 
+  \overset{\text{iid}}{\sim} \text{N}(0, \sigma^{2}) $$
+
+```{r fig.width = 6.5, fig.height = 4.5, fig.cap = "Ajuste do modelo de regressão linear por partes ao conjunto de dados de queda de voltagem"}
+data("VD")
+data <- VD
+data$x2 <- with(data,
+                ifelse(Time <= 6.5, 0, Time - 6.5))
+data$x3 <- with(data,
+                ifelse(Time <= 13, 0, Time - 13))
+m0 <- lm(Voltage_Drop ~ Time+I(Time**2)+I(Time**3)+I(x2**3)+I(x3**3),
+         data) 
+coef.m0 <- coefficients(m0)
+attr(coef.m0, "names") <- c("beta0", "beta1", "beta2", "beta3", "beta4", "beta5")
+xyplot(Voltage_Drop ~ Time,
+       pch = 16,
+       jitter.x = TRUE,
+       type = c("p", "g"),
+       xlab = "Tempo",
+       ylab = list(label = "Queda \n de \n voltagem",
+                   rot = 0),
+       scales = list(x = list(tick.number = 11),
+                     y = list(tick.number = 9)),
+       data) +
+  layer(with(as.list(coef.m0),
+             panel.curve(beta0+beta1*x+beta2*x**2+{beta3*x**3}*(x <= 6.5)+
+                         {beta3*x**3+beta4*(x-6.5)**3}*(x > 6.5 & x <= 13)+
+                         {beta3*x**3+beta4*(x-6.5)**3+beta5*(x-13)**3}*(x > 13),
+                         col = 6,
+                         lwd = 2)))
+```
+
+No intervalo $[0; 6.5]$ temos o modelo:
+
+> $$ y_{i} = \beta_{0} + \beta_{1} x_{i} + \beta_{2} x_{i}^{2} + \beta_{3} x_{i}^{3} + \epsilon_{i}. $$
+
+No intervalo $(6.5; 13]$ temos o modelo:
+
+> $$ y_{i} = \beta_{0} + \beta_{1} x_{i} + \beta_{2} x_{i}^{2} + \beta_{3} x_{i}^{3} + \beta_{4} (x_{i} - 6.5)^{3} + \epsilon_{i}. $$
+
+No intervalo $(30; 50]$ temos o modelo:
+
+> $$ y_{i} = \beta_{0} + \beta_{1} x_{i} + \beta_{2} x_{i}^{2} + \beta_{3} x_{i}^{3} + \beta_{4} (x_{i} - 6.5)^{3} + \beta_{5} (x_{i} - 13)^{3} + \epsilon_{i}. $$
+
+```{r fig.width = 12.5, fig.height = 2.75, fig.cap = "Análise de resíduos do modelo de regressão linear por partes. (a) Verificação da qualidade do ajuste do modelo; (b) Verificação do pressuposto de ausência de relação média - variância; (c) Verificação do pressuposto de normalidade", out.extra = 'style = "margin:0 -280px"'}
+r.m0 <- residuals(m0,
+               type = "pearson")
+f.m0 <- fitted(m0)
+ar.1 <- xyplot(r.m0 ~ f.m0,
+               type = c("p", "g"),
+               pch = 16,
+               jitter.x = TRUE,
+               xlab = "Valores ajustados",
+               ylab = list(label = "Resíduos \n de Pearson",
+                           rot = 0),
+               main = "(a) Ajuste do modelo",
+               panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(f.m0, r.m0,
+                             lwd = 2,
+                             col = 2)})
+ar.2 <- xyplot(sqrt(abs(r.m0)) ~ f.m0,
+               type = c("p", "g"),
+               pch = 16,
+               jitter.x = TRUE,
+               xlab = "Valores ajustados",
+               ylab = list(label = expression(sqrt(abs(atop("Resíduos", "de Pearson")))),
+                           rot = 0),
+               main = "(b) Relação média - variância",
+               panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(f.m0, sqrt(abs(r.m0)),
+                             lwd = 2,
+                             col = 2)})
+ar.3 <- qqmath(r.m0,
+               type = c("p", "g"),
+               pch = 16,
+               xlab = "Quantis teóricos",
+               ylab = list(label = "Quantis \n amostrais",
+                           rot = 0),
+               main = "(c) Normalidade")
+print(ar.1,
+      position = c(0, 0,
+                   1/3, 1),
+      more = TRUE)
+print(ar.2,
+      position = c(1/3, 0,
+                   2/3, 1),
+      more = TRUE)
+print(ar.3,
+      position = c(2/3, 0,
+                   1, 1))
+```
+
+Pelos três gráficos de análise de resíduos acima mostrados, vemos uma adequação razoável aos pressupostos.
+
+***
+
+# Como ajustar uma ***Piecewise Regression*** no **R**?^[As informações contidas nesta seção foram
+retiradas do artigo de **Muggeo (2003)**]
+
+No **R**, o ajuste de uma ***Piecewise Regression*** pode ser feita com o [*package* ***segmented***](https://cran.r-project.org/web/packages/segmented/index.html) (relacionamentos segmentados
+em modelos de regressão com estimação de pontos de quebra/pontos de mudança).
+
+Com este *package*, somos capazes de estimar modelos de regressão com relacionamentos lineares por partes 
+com um número fixo de pontos de quebra.
+
+> O objetivo do *package* ***segmented*** é estimar modelos lineares e modelos lineares generalizados (e 
+praticamente qualquer modelo de regressão) com um ou mais relacionamentos segmentados no preditor linear.
+Estimação das inclinações e dos possíveis múltiplos pontos de quebra são providas. O *package* incluí
+funções de teste/estimação e métodos para retornar, resumir e imprimir gráficos dos resultados.
+
+> O algoritmo utilizado pela ***segmented*** não é uma busca num grid (*grid-search*). É um procedimento
+iterativo (**Muggeo, 2003**)^[Muggeo, V.M.R. (2003) Estimating regression models with unknown break-points.
+*Statistics in Medicine* **22**, 3055-3071.] que precisa de valores (chutes) iniciais *apenas* para o 
+parâmetro correspondente ao ponto de quebra e por este motivo ele é bastante eficiente mesmo com vários
+pontos de quebra a serem estimados.
+
+## Como funciona o algoritmo de estimação?
+
+Uma outra forma de representar o modelo com uma única covariável é a seguinte:
+
+> $$ \beta_{1} x_{i} + \beta_{2} (x_{i} - \theta)_{+}, \quad \text{onde} \\
+(x_{i} - \theta)_{+} = (x_{i} - \theta) \cdot I(x_{i} > \theta), \quad \text{e} $$
+
+* $x$ é a covariável e o índice $i = 1, 2, ... , n$ são as observações;  
+* $I(\cdot)$ é a função indicadora igual a $1$ quando a condição é verdadeira;
+* $\beta_{1}$ é a inclinação da primeira reta;
+* $\beta_{2}$ é a diferença das inclinações;
+* $\theta$ é o ponto de quebra.
+
+Da forma como o modelo está acima representado, temos um modelo não linear. **Muggeo (2003)** mostra uma
+aproximada representação linear intrínseca que, até certo ponto, nos permite traduzir o problema em uma
+estrutura linear padrão: dado um chute inicial para o ponto de quebra, $\tilde{\theta}$, sucessivos
+segmentos são tentados para estimar o modelo pelo ajuste iterativo do modelo linear com o seguinte preditor
+linear:
+
+> $$ \beta_{1} x_{i} + \beta_{2} (x_{i} - \tilde{\theta})_{+} + \gamma I(x_{i} > \tilde{\theta})^{-}, \quad
+  \text{onde} $$ 
+
+* $I(\cdot)^{-} = -I(\cdot)$;
+* $\gamma$ é o parâmetro que pode ser entendido como uma re-parametrização de $\theta$ e por isso 
+representa a estimação do ponto de quebra.
+
+A cada iteração, um modelo linear padrão é ajustado, e o valor do ponto de quebra é atualizado via 
+$\hat{\theta} = \tilde{\theta} + \hat{\gamma} / \hat{\beta}_{2}$; perceba que $\hat{\gamma}$ representa o 
+intervalo, na atual estimativa de $\theta$, entre as duas retas ajustadas oriundas do modelo descrito. 
+Quando o algoritmo converge, o 'intervalo' se torna menor, i.e., $\hat{\gamma} \approx 0$, e o erro padrão
+(*standard error*) de $\hat{\theta}$ pode ser obtido via método Delta para a razão 
+$\hat{\gamma} / \hat{\beta}_{2}$ que se reduz em $\text{SE}(\hat{\gamma})/|\hat{\beta}_{2}|$ se 
+$\hat{\gamma} = 0$.
+
+A ideia pode ser utilizada para ajustar múltiplos relacionamentos segmentados, apenas pela inclusão no 
+preditor linear de apropriadas variáveis construídas para que os adicionais pontos de quebra possam ser
+estimados: em cada passo, todo ponto de quebra estimado é atualizado através dos importantes coeficientes
+de 'intervalo' e 'diferença na inclinação'. Devido a facilidade computacional, o algoritmo é capaz de
+executar a estimação de múltiplos pontos de quebra de uma maneira bem eficiente.
+
+## Outras maneiras de lidar com pontos de quebra
+
+Um outro *package* do **R**  que lida com pontos de quebra é o 
+[***strucchange***](https://cran.r-project.org/web/packages/strucchange/index.html) de 
+**Zeileis et al. (2002)**^[A. Zeileis, F. Leisch, K. Hornik, and C. Kleiber. $\text{strucchange}$: An R 
+package for testing for struc-tural change in linear regression models. *Journal of Statistical Software*, 
+7(2):1-38, 2002.]. O *package* trabalha com modelos de regressão tendo um diferente conjunto de parâmetros 
+para cada 'pedaço' da variável segmentada, tipicamente, o tempo; ***strucchange*** realiza a estimação dos
+pontos de quebra via um algoritmo de grid de busca dinâmico e possibilita o teste da instabilidade do
+parâmetro.
+
+***
+
+# Modelos não lineares^[Informações retiradas da [`Tese de Doutorado de Walmes Marques Zeviani. 
+Parametrizações interpretáveis em modelos não lineares, 
+2013`](http://www.leg.ufpr.br/~walmes/docs/WalmesTese.pdf)]
+
+Alguns modelos não lineares são segmentados, tendo em alguns aspectos vantagens e facilidades em sua 
+utilização.
+
+Reparametrizações podem ser feitas com o intuito de facilitar a interpretabilidade dos 
+parâmetros^[Este não é o único intuito e objetivo das reparametrizações, longe disso. Contudo, neste 
+material, este é o intuito abordado]. O procedimento de reparametrização pode ser sistematizado em três
+etapas:
+
+> 1. Expressar o parâmetro de interesse $\vartheta$, como função dos elementos de $\theta$, ou seja, 
+  $\vartheta = g(\theta)$;
+  2. Escolher um dos elementos $\theta_{i}$ de $\theta = (\theta_{i}, \theta_{i-1})$ para ser colocado em 
+     função de $\vartheta$ de tal forma a obter $\theta_{i} = h(\theta_{-i}, \vartheta)$;
+  3. Substituir $\theta_{i}$ na equação do modelo não linear pela expressão obtida no passo anterior, 
+     $h(\theta_{-i}, \vartheta)$, fazendo as simplificações convenientes. Assim o modelo 
+     $f(\textbf{x}, \theta)$ pode ser expresso como $f(\textbf{x}, \theta_{-i}, \vartheta)$.
+
+A função $h$ é a inversa de $g$ em $\theta_{i}$.
+
+## Alguns modelos
+
+### Modelo segmentado conhecido como linear-platô
+
+Trata-se da junção de dois segmentos de reta no qual um deles é horizontal. O modelo pode ser escrito da 
+seguinte forma:
+
+> $$ \left\{\begin{matrix}
+\theta_{0} + \theta_{1} x, \quad x \leq \theta_{b} \\ 
+\theta_{0} + \theta_{1} \theta_{b}, \quad x > \theta_{b}
+\end{matrix}\right. $$
+
+* A função é crescente (decrescente) para $\theta_{1} > 0$ $(\theta_{1} < 0)$ até o valor 
+  $0 < x < \theta_{b}$, e para $x > \theta_{b}$ a função é constante;
+* O intercepto é representado por $\theta_{0}$;
+* $\theta_{1}$ corresponde à taxa de variação antes do ponto de quebra $\theta_{b} > 0$.
+
+#### Reparametrização
+
+> $$ \begin{align}
+\vartheta & = g(\theta) \\
+\vartheta_{b} & = \theta_{0} + \theta_{1} \theta_{b}
+\end{align}$$
+
+> $$ \begin{align}
+\theta_{i} & = g^{-1}(\vartheta, \theta_{-1}) \\
+\theta_{0} & = \vartheta_{b} - \theta_{1} \theta_{b}
+\end{align}$$
+
+Resultando em:
+
+> $$ \left\{\begin{matrix}
+\vartheta_{b} + \theta_{1} (x - \theta_{b}), \quad & x \leq \theta_{b} \\ 
+\vartheta_{b}, \quad & x > \theta_{b}
+\end{matrix}\right. $$
+
+* $\vartheta_{b}$ representa o valor da função no ponto de quebra $\theta_{b}$ que é o máximo (mínimo) 
+  valor da função se $\theta_{1} > 0$ $(\theta_{1} < 0)$.
+
+```{r fig.cap = "Curvas do modelo segmentado conhecido como linear-platô"}
+xyplot(1:50 ~ 1:50,
+       pch = 16,
+       jitter.x = TRUE,
+       type = c("n", "g"),
+       scales = list(x = list(draw = FALSE),
+                     y = list(draw = FALSE)),
+       xlab = "x",
+       ylab = list(label = "y",
+                   rot = 0),
+       key = list(space = "right",
+                  title = expression(theta[1]),
+                  cex.title = 1.15, 
+                  text = list(c("> 0", "< 0")), 
+                  lines = list(col = c(3, 6), 
+                               lwd = 2))) +
+  layer(with(list(vthB = 35,
+                  th1 = 1,
+                  thB = 30),
+             panel.curve(vthB+{th1*(x-thB)}*(x <= thB),
+                         col = 3,
+                         lwd = 2))) +
+  layer(with(list(vthB = 15,
+                  th1 = -1,
+                  thB = 30),
+             panel.curve(vthB+{th1*(x-thB)}*(x <= thB),
+                         col = 6,
+                         lwd = 2)))
+```
+
+### Modelo segmentado conhecido como bi-linear segmentado{#bi-linear}
+
+Trata-se da junção de dois segmentos de reta. O modelo pode ser escrito da seguinte forma:
+
+> $$ \left\{\begin{matrix}
+\theta_{0} + \theta_{1} x, \quad & x \leq \theta_{b} \\ 
+\theta_{0} + \theta_{1} \theta_{b} + \theta_{2} (x - \theta_{b}), \quad & x > \theta_{b}
+\end{matrix}\right. $$
+
+A função assume diversas formas dependendo dos valores dos parâmetros.
+
+* O intercepto é representado por $\theta_{0}$;
+* $\theta_{1}$ e $\theta_{2}$ são os coeficientes ou taxas do primeiro e segundo segmentos de reta, 
+  respectivamente, que se encontram no ponto $\theta_{b}$, denominado de ponto de quebra.
+
+#### Reparametrização
+
+> $$ \vartheta_{b} = \theta_{0} + \theta_{1} \theta_{b} $$
+
+> $$ \theta_{0} = \vartheta_{b} - \theta_{1} \theta_{b} $$
+
+Resultando em:
+
+> $$ \left\{\begin{matrix}
+\vartheta_{b} + \theta_{1} (x - \theta_{b}), \quad & x \leq \theta_{b} \\
+\vartheta_{b} + \theta_{2} (x - \theta_{b}), \quad & x > \theta_{b}
+\end{matrix}\right. $$
+
+* O ponto de quebra foi priorizado e representado de tal modo que $\vartheta_{b}$ é o valor da função no 
+  ponto de quebra $\theta_{b}$.
+* Se $\theta_{2} = 0$ o modelo reduz-se ao linear-platô;
+* Se $\theta_{1} = 0$ reduz-se ao modelo platô-linear;
+* Se $\theta_{1} = \theta_{2}$ reduz-se ao modelo linear simples.
+
+```{r fig.cap = "Curvas do modelo segmentado conhecido como bi-linear segmentado"}
+xyplot(1:50 ~ 1:50,
+       pch = 16,
+       jitter.x = TRUE,
+       type = c("n", "g"),
+       scales = list(x = list(draw = FALSE),
+                     y = list(draw = FALSE)),
+       xlab = "x",
+       ylab = list(label = "y",
+                   rot = 0),
+       key = list(space = "right",
+                  text = list(c(expression(theta[1]!=0),
+                                expression(theta[1]!=theta[2]),
+                                expression(theta[2]!=0),
+                                expression(theta[2]==0),
+                                expression(theta[1]==0),
+                                expression(theta[1]==theta[2]))), 
+                  lines = list(col = c("white", "green3", "white", "magenta", "red", "blue"), 
+                               lwd = 2))) +
+  layer(with(list(vthB = 30,
+                  th1 = 1,
+                  thB = 20,
+                  th2 = 2),
+             panel.curve(vthB+{th1*(x-thB)}*(x <= thB)+th2*(x-thB),
+                         col = 3,
+                         lwd = 2))) +
+  layer(with(list(vthB = 30,
+                  th1 = 1,
+                  thB = 20,
+                  th2 = 0),
+             panel.curve(vthB+{th1*(x-thB)}*(x <= thB)+th2*(x-thB),
+                         col = 6,
+                         lwd = 2))) +
+  layer(with(list(vthB = 30,
+                  th1 = 0,
+                  thB = 20,
+                  th2 = 4),
+             panel.curve(vthB+{th1*(x-thB)}*(x <= thB)+th2*(x-thB),
+                         col = 2,
+                         lwd = 2))) +
+  layer(with(list(vthB = 30,
+                  th1 = 1,
+                  thB = 20,
+                  th2 = 1),
+             panel.curve(vthB+{th1*(x-thB)}*(x <= thB)+th2*(x-thB),
+                         col = 4,
+                         lwd = 2)))
+```
+
+### Modelo segmentado conhecido como modelo quadrático-platô
+
+Trata-se da junção de reta horizontal com o ponto crítico de modelo quadrático. O modelo pode ser escrito 
+da seguinte forma:
+
+> $$ \left\{\begin{matrix}
+\theta_{0} + \theta_{1} x + \theta_{2} x^{2}, \quad & x \leq -\theta_{1} / (2 \theta_{2}) \\ 
+\theta_{0} + \theta_{1} \left( \frac{-\theta_{1}}{2 \theta_{2}} \right) + \theta_{2} 
+\left( \frac{-\theta_{1}}{2 \theta_{2}} \right)^{2}, \quad & x > -\theta_{1} / (2 \theta_{2})
+\end{matrix}\right. $$
+
+* A função pode ser crescente ou decrescente na porção representada pelo modelo quadrático e constante para
+  $x > \theta_{b}$.
+* O intercepto é $\theta_{0}$;
+* $\theta_{1}$ é coeficiente angular que representa a taxa na origem;
+* $\theta_{2}$ é a curvatura.
+
+A junção das funções é no ponto crítico do modelo quadrático e é calculada por 
+$-\theta_{1}/(2 \theta_{2})$.
+
+#### Reparametrização
+
+> $$ \begin{align}
+\vartheta_{x} & = \frac{-\theta_{1}}{2 \theta_{2}} \\
+\vartheta_{y} & = \theta_{0} + \theta_{1} \vartheta_{x} + \theta_{2} \vartheta_{x}^{2}
+\end{align} $$
+
+> $$ \begin{align}
+\theta_{1} & = -2 \theta_{2} \vartheta_{x} \\
+\theta_{0} & = \vartheta_{y} - \theta_{1} \vartheta_{x} - \theta_{2} \vartheta_{x}^{2}
+\end{align} $$
+
+Resultando em:
+
+> $$ \left\{\begin{matrix}
+\vartheta_{y} + \theta_{2} (x - \vartheta_{x})^{2}, \quad & x \leq \vartheta_{x} \\ 
+\vartheta_{y}, \quad & x > \vartheta_{x}
+\end{matrix}\right. $$
+
+* O ponto crítico foi priorizado e representado de tal modo que $\vartheta_{y}$ é o valor máximo 
+  $(\theta_{2} < 0)$ ou mínimo $(\theta_{2} > 0)$ da função no ponto de junção $\vartheta_{x}$.
+
+```{r fig.cap = "Curvas do modelo segmentado conhecido como modelo quadrático-platô"}
+xyplot(1:50 ~ 1:50,
+       pch = 16,
+       jitter.x = TRUE,
+       type = c("n", "g"),
+       scales = list(x = list(draw = FALSE),
+                     y = list(draw = FALSE)),
+       xlab = "x",
+       ylab = list(label = "y",
+                   rot = 0),
+       key = list(space = "right",
+                  title = expression(theta[2]),
+                  cex.title = 1.15,
+                  text = list(c("> 0", "< 0")), 
+                  lines = list(col = c(3, 6), 
+                               lwd = 2))) +
+  layer(with(list(vthY = 30,
+                  th2 = -1,
+                  vthX = 20),
+             panel.curve(vthY+{th2*(x-vthX)**2}*(x <= vthX),
+                         col = 3,
+                         lwd = 2))) +
+  layer(with(list(vthY = 20,
+                  th2 = 1,
+                  vthX = 20),
+             panel.curve(vthY+{th2*(x-vthX)**2}*(x <= vthX),
+                         col = 6,
+                         lwd = 2)))
+```
+
+## Modelos com parâmetros condicionalmente lineares
+
+Quando temos modelos não lineares mas com parâmetros condicionalmente lineares, podemos fazer o ajuste com
+a função ***nls*** e com o algoritmo ***plinear***.
+
+### Mas o que são parâmetros condicionalmente lineares?
+
+Um modelo é linear baseado na forma como seus parâmetros aparecem. Um modelo pode ser dito linear se toda 
+derivada parcial 
+
+> $$ \frac{\partial \mu_{y|\textbf{x}}}{\partial \beta_{i}}, \quad i = 0, 1, 2, ..., p $$
+
+não depender de qualquer parâmetro. ($\mu_{y|\textbf{x}} = \beta_{0} + \beta_{1} x_{1} + \beta_{2} x_{2}$,
+por exemplo).
+
+No caso dos modelos não lineares, derivamos parcialmente nossa função $f(\textbf{x}, \theta)$ em relação a 
+cada parâmetro de $\theta$.
+
+Suponha um modelo com três parâmetros, $\theta^{T} = [\theta_{1}\ \theta_{2}\ \theta_{3}]$. Se dado o 
+conhecimento do valor do parâmetro $\theta_{1}$, a derivada parcial de $f(\textbf{x}, \theta_{-1})$ em 
+relação a $\theta_{2}$ não depender de parâmetros, então dizemos que $\theta_{2}$ é um parâmetro 
+condicionalmente linear.
+
+Mostramos dois exemplos utilizando o mesmo conjunto de dados da seção
+[`Um ponto de quebra, o que fazer?`](#umponto)
+
+### Exemplo: Modelo bi-linear segmentado
+
+Este modelo já foi mostrado na seção [`Modelo segmentado conhecido como bi-linear segmentado`](#bi-linear).
+Reparametrizado ele é dado da seguinte forma:
+
+> $$ \left\{\begin{matrix}
+\vartheta_{b} + \theta_{1} (x - \theta_{b}), \quad & x \leq \theta_{b} \\
+\vartheta_{b} + \theta_{2} (x - \theta_{b}), \quad & x > \theta_{b}
+\end{matrix}\right. $$
+
+* $\vartheta_{b}$ é o valor da função no 
+  ponto de quebra $\theta_{b}$.
+* $\theta_{1}$ e $\theta_{2}$ são os coeficientes ou taxas do primeiro e segundo segmentos de reta, 
+  respectivamente, que se encontram no ponto $\theta_{b}$.
+
+Temos um modelo linear a partir do momento em que conhecemos o ponto de quebra $\theta_{b}$. Logo, os 
+demais parâmetros do modelo são condicionalmente lineares. Veja as derivadas parciais:
+
+> $$ f(\textbf{x}, \theta) = \vartheta_{b} + {\theta_{1} (x - \theta_{b})} \cdot (x \leq \theta_{b}) + 
+                             \theta_{2} \cdot (x - \theta_{b}) $$
+
+> $$ \begin{matrix}
+\frac{\partial f(\textbf{x}, \theta)}{\partial \vartheta_{b}} = & 1 \\
+\frac{\partial f(\textbf{x}, \theta)}{\partial \theta_{1}} = & x - \theta_{b} \\
+\frac{\partial f(\textbf{x}, \theta)}{\partial \theta_{2}} = & x - \theta_{b} \\
+\frac{\partial f(\textbf{x}, \theta)}{\partial \theta_{b}} = & \left\{\begin{matrix}
+                                                               -\theta_{1}, \quad & x \leq \theta_{b} \\
+                                                               -\theta_{2}, \quad & x > \theta_{b}
+                                                               \end{matrix}\right.
+\end{matrix} $$
+
+* $\vartheta_{b}$ é linearmente independentemente;
+* Conhecendo $\theta_{b}$, $\theta_{1}$ e $\theta_{2}$ são lineares.
+
+Basicamente qualquer modelo não linear pode ser ajustado no **R** com a função ***nls***.
+
+Com o algoritmo ***plinear*** os parâmetros condicionalmente lineares não são ajustados. Para que isso 
+aconteça devem ser passadas para a função as derivadas parciais e chutes iniciais são dados apenas para os 
+demais parâmetros, $\theta_{b}$ neste caso.
+
+```{r fig.cap = "Ajuste do modelo de regressão não linear com algoritmo plinear ao conjunto de dados dos carregamentos"}
+path <- "~/Dropbox/CE092 - 2015-2/Alunos/Henrique/Piecewise Regression/shipment.txt"
+data <- read.table(path,
+                   header = TRUE)
+m2 <- nls(y ~ cbind(1, {x1-thB}*(x1 <= thB), {x1-thB}*(x1 > thB)),
+          start = list(thB = 250),
+          algorithm = "plinear",
+          data)
+coef <- coefficients(m2)
+attr(coef, "names")[2:4] <- c("vthB", "th1", "th2")
+xyplot(y ~ x1,
+       pch = 16,
+       jitter.x = TRUE,
+       type = c("p", "g"),
+       xlab = expression(x[1]),
+       ylab = list(label = "y",
+                   rot = 0),
+       scales = list(y = list(tick.number = 8)),
+       xlim = c(100, 425),
+       ylim = c(7, 16),
+       data) +
+  layer(with(as.list(coef),
+             panel.curve(vthB+{th1*(x-thB)}*(x <= thB)+th2*(x-thB),
+                         col = 3,
+                         lwd = 2)))
+```
+```{r fig.width = 7, fig.height = 4.5, fig.cap = "Ajuste do modelo de regressão linear simples, do modelo de regressão linear por partes e do modelo de regressão não linear com algoritmo plinear ao conjunto de dados dos carregamentos"}
+m0 <- lm(y ~ x1,
+         data)
+coef.m0 <- coefficients(m0)
+attr(coef.m0, "names") <- c("beta0", "beta1")
+data$x2 <- with(data,
+                ifelse(x1 <= 250, 0, x1 - 250))
+m1 <- lm(y ~ x1 + x2,
+         data)
+coef.m1 <- coefficients(m1)
+attr(coef.m1, "names") <- c("beta0", "beta1", "beta2")
+xyplot(y ~ x1,
+       pch = 16,
+       jitter.x = TRUE,
+       type = c("p", "g"),
+       xlab = expression(x[1]),
+       ylab = list(label = "y",
+                   rot = 0),
+       scales = list(y = list(tick.number = 8)),
+       xlim = c(100, 425),
+       ylim = c(7, 16),
+       key = list(space = "right",
+                  title = "Regressão",
+                  cex.title = 1.15, 
+                  text = list(c("Linear Simples", "Linear por Partes", "Não Linear - plinear")), 
+                  lines = list(col = c(3, 4, 2), 
+                               lwd = 2)),
+       data) +
+  layer(with(as.list(coef.m0),
+             panel.curve(beta0+beta1*x,
+                         col = 3,
+                         lwd = 2))) +
+  layer(with(as.list(coef.m1),
+             panel.curve(beta0+{beta1*x}*(x <= 250)+{beta1*x+beta2*(x-250)}*(x > 250),
+                         col = 4,
+                         lwd = 2))) +
+  layer(with(as.list(coef),
+             panel.curve(vthB+{th1*(x-thB)}*(x <= thB)+th2*(x-thB),
+                         col = 2,
+                         lwd = 2)))
+```
+
+### Exemplo: Modelo Michaelis-Menten
+
+O modelo Michaelis-Menten reparametrizado é dado da seguinte forma:
+
+> $$ f(\textbf{x}, \theta) = \frac{\theta_{a} x}{\vartheta_{q} \frac{1 - q}{q} + x} $$
+
+* $\theta_{a}$ é a assíntota;
+* $0 < q < 1$ é uma constante que representa uma fração de \theta{a} para o qual $\vartheta_{q} > 0$ é o
+  valor correspondente na abscissa.
+
+Aqui consideramos $q = 0.5$.
+
+Temos um modelo linear a partir do momento em que conhecemos $\vartheta_{q}$. Logo, $\theta_{a}$ é 
+condicionalmente linear. Veja as derivadas parciais:
+
+> $$ \frac{\partial f(\textbf{x}, \theta)}{\partial \theta_{a}} = \frac{x}{\vartheta_{q} + x} \qquad
+     \frac{\partial f(\textbf{x}, \theta)}{\partial \vartheta_{q}} = -
+                                          \frac{\theta_{a} x}{(\vartheta_{q} + x)^{2}} $$
+
+* Conhecendo $\vartheta_{q}$, $\theta_{a}$ é linear;
+* $\vartheta_{q}$ é não linear.
+
+```{r fig.cap = "Ajuste do modelo de regressão não linear Michaelis-Menten (reparametrizado) com algoritmo plinear ao conjunto de dados dos carregamentos"}
+m0 <- nls(y ~ x1/(vthQ+x1),
+          start = list(vthQ = 110),
+          algorithm = "plinear",
+          data)
+coef <- coefficients(m0)
+attr(coef, "names")[2] <- "thA"
+xyplot(y ~ x1,
+       pch = 16,
+       jitter.x = TRUE,
+       type = c("p", "g"),
+       xlab = expression(x[1]),
+       ylab = list(label = "y",
+                   rot = 0),
+       scales = list(y = list(tick.number = 8)),
+       xlim = c(100, 425),
+       ylim = c(7, 16),
+       data) +
+  layer(with(as.list(coef),
+             panel.curve(thA*x/(vthQ+x),
+                         col = 3,
+                         lwd = 2)))
+```
+
