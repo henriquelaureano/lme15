@@ -11,7 +11,7 @@ Professor: [Paulo Justiniano](http://leg.ufpr.br/~paulojus/)
 Direct link to the activities:
 
 + Piecewise regression
-  - [Henrique](http://www.mynameislaure.github.io/emr15/piece-reg/)
-  - [Eduardo](http://www.mynameislaure.github.io/emr15/piece-reg/piecewise.html)
+  - [Henrique](http://mynameislaure.github.io/emr15/piece-reg/)
+  - [Eduardo](http://mynameislaure.github.io/emr15/piece-reg/piecewise.html)
 
 ***
