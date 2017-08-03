@@ -1,0 +1,286 @@
+---
+title: "Estimação de modelo misto linear com resposta Poisson e efeito aleatório Normal utilizando a aproximação de Laplace"
+author: "[Henrique Aparecido Laureano](http://lattes.cnpq.br/2224901552085090)"
+date: "Novembro de 2015"
+output:
+  rmarkdown::html_vignette:
+    fig_width: 6.75
+    fig_height: 4.5
+    fig_cap: TRUE
+    toc: yes
+---
+
+<style type="text/css">
+#TOC {
+  margin: 0 145px;
+}
+</style>
+
+```{r setup, include = FALSE}
+require(knitr)
+opts_chunk$set(
+    cache = TRUE,
+    cache.path = "cache/",
+    fig.path = "graphs/",
+    dpi = 100,
+    fig.align = "center",
+    comment = NA,
+    warning = FALSE,
+    error = FALSE)
+```
+
+***
+
+**Contextualizando:**
+
+* 10 indivíduos ($i$) com 5 repetições cada ($j$) seguindo distribuição Poisson de parâmetro $\lambda_{i} = \mu_{i} + b_{i}$,
+  i.e., $y_{ij} \sim {\rm Poisson}(\lambda_{i}) = {\rm Poisson}(\mu_{i} + b_{i})$
+
+* Efeito aleatório nos indivíduos seguindo distribuição Normal de média 0 e variância $\sigma^{2}$, i.e.,
+  $b_{i} \sim {\rm Normal}(0, \sigma^{2})$
+
+***
+
+Escrevemos a verossimilhança, $L_{i}(\theta_{i} ; y_{ij})$),da seguinte maneira
+
+> \[ \begin{align*}
+      L_{i}(\theta_{i} ; y_{ij}) & = \int f(y_{i} | b_{i}) \cdot f(b_{i}) {\rm d}b_{i} \\
+                                 & = \int \prod_{j = 1}^{5} \frac{e^{\mu_{i} + b_{i}} (\mu_{i} + b_{i})^{y_{ij}}}{y_{ij}!}
+                                          \cdot \frac{1}{\sqrt{2 \pi \sigma^{2}}}
+                                                {\rm exp}\left\{-\frac{1}{2 \sigma^{2}} b_{i}^{2}\right\} \\
+                                 & = \int g(b_{i}) {\rm d}b_{i} \\
+                                 & = \int e^{\text{log} g(b_{i})} {\rm d}b_{i} \\
+                                 & = \int e^{Q(b_{i})} {\rm d}b_{i}
+     \end{align*} \]
+
+Lembrando que $\theta$ representa os parâmetros $\mu_{i}$  e $\sigma^{2}$.
+
+Utilizando a aproximação de Laplace expandimos $Q(b_{i})$ numa série de Taylor de segunda ordem
+
+***
+
+**Expansão de uma função numa série de Taylor de 2a ordem:**
+
+> \[ f(x) \cong f(x_{0}) + (x - x_{0}) {f}'(x_{0}) + \frac{1}{2} (x - x_{0})^{2} {f}''(x_{0}) \]
+
+***
+
+> \[ \begin{align*}
+      L_{i}(\theta_{i} ; y_{ij}) & = \int e^{Q(\hat{b}_{i}) + (b_{i} - \hat{b}_{i})
+                                             \underset{0}{\underbrace{{Q}'(\hat{b}_{i})}} +
+                                             \frac{1}{2} (b_{i} - \hat{b}_{i})^{2} {Q}''(\hat{b}_{i})} {\rm d}b_{i} \\
+                                 & = e^{Q(\hat{b}_{i})} \int {\rm exp}\left\{\frac{1}{2}
+                                     \frac{(b_{i} - \hat{b}_{i})^{2}}{({Q}''(\hat{b}_{i}))^{-1}}\right\} {\rm d}b_{i} \\
+                                 & = e^{Q(\hat{b}_{i})} \int {\rm exp}\left\{-\frac{1}{2}
+                                     \frac{(b_{i} - \hat{b}_{i})^{2}}{|{Q}''(\hat{b}_{i})^{-1}|}\right\} {\rm d}b_{i} \\
+                                 & = e^{Q(\hat{b}_{i})} \int
+                                     \frac{\sqrt{2 \pi |{Q}''(\hat{b}_{i})^{-1}|}}{\sqrt{2 \pi |{Q}''(\hat{b}_{i})^{-1}|}}
+                                     {\rm exp}\left\{-\frac{1}{2}
+                                     \frac{(b_{i} - \hat{b}_{i})^{2}}{|{Q}''(\hat{b}_{i})^{-1}|}\right\} {\rm d}b_{i} \\
+                                 & = \frac{e^{Q(\hat{b}_{i})} \sqrt{2 \pi}}{|{Q}''(\hat{b}_{i})^{1/2}|}
+                                     \underset{1}{\underbrace{\int
+                                     \frac{1}{\sqrt{2 \pi \underset{\sigma^{2}}{\underbrace{|{Q}''(\hat{b}_{i})^{-1}|}}}}
+                                     {\rm exp}\left\{-\frac{1}{2}
+                                     \frac{(b_{i} - \hat{b}_{i})^{2}}{|{Q}''(\hat{b}_{i})^{-1}|}\right\} {\rm d}b_{i}}} \\
+                                 & = \frac{e^{Q(\hat{b}_{i})} \sqrt{2 \pi}}{|{Q}''(\hat{b}_{i})|^{1/2}}
+                                     \cong L_{i}(y_{ij} ; b_{i})
+     \end{align*} \]
+
+***
+
+**Código:**
+
+***
+
+**Definições e carregamentos**
+
+```{r}
+rm(list = ls())
+pkg <- c("latticeExtra", "lme4", "car", "htmlTable")
+sapply(pkg, require,
+       character.only = TRUE)
+```
+
+***
+
+**Simulando dados**
+
+> \[ \mu = 2 \quad {\rm e} \quad \sigma^{2} = 1 \]
+
+```{r}
+rdata <- function(parameters, i, j,
+                  seed = 22){
+  set.seed(seed)
+  b <- rnorm(i, 0, parameters[2])
+  lambda <- exp(parameters[1] + b)
+  y <- rpois(i * j, lambda)
+  data <- data.frame(y = y,
+                     id = 1:i)
+  data <- data[order(data$id), ]
+  data$b <- rep(b,
+                each = j)
+  rownames(data) <- NULL
+  return(data)} ; da <- rdata(c(2, 1), 10, 5)
+```
+```{r, echo=FALSE}
+xyplot(da$y ~ da$id,
+       type = c("p", "g"),
+       jitter.x = TRUE,
+       pch = 16,
+       scales = list(x = list(tick.number = 10),
+                     y = list(tick.number = 11)),
+       xlab = "Indivíduos",
+       ylab = list(label = "Variável\nresposta",
+                   rot = 0),
+       sub = "Dispersão dos dados",
+       par.settings = list(par.sub.text = list(font = 2,
+                                               just = "left", 
+                                               x = grid::unit(5, "mm"))))
+```
+
+***
+
+**Implementando a aproximação de Laplace**
+
+> \[ {\rm log}\frac{e^{Q(\hat{b}_{i})} \sqrt{2 \pi}}{|{Q}''(\hat{b}_{i})|^{1/2}} =
+     Q(\hat{b}_{i}) \frac{1}{2} {\rm log} 2 \pi -\frac{1}{2} {\rm log}|{Q}''(\hat{b}_{i})|^{1/2} \cong
+     l_{i}(y_{ij} ; b_{i}) \]
+
+```{r}
+laplace <- function(fun, ...){
+  est <- optim(par = 0,
+               fn = fun, ...,
+               method = "BFGS",
+               control = list(fnscale = -1),
+               hessian = TRUE)
+  ll.log <- est$value * .5 * log(2*pi) - .5 * determinant( -est$hessian)$modulus
+  return(ll.log)}
+```
+
+***
+
+**Implementando $Q(b_{i})$**
+
+```{r}
+qdeb <- function(b, parameters, data){
+  lambda <- exp(parameters[1] + b)
+  q.est <- sum(dpois(data,
+                     lambda = lambda,
+                     log = TRUE)) + dnorm(b,
+                                          mean = 0,
+                                          sd = exp(parameters[2]),
+                                          log = TRUE)
+  return(q.est)}
+```
+
+***
+
+**Implementando a função de log verossimilhança**
+
+```{r}
+loglik <- function(parameters, data){
+  data.group <- split(data, data[[2]])
+  lap.est <- c()
+  for(i in 1:length(data.group)){
+    lap.est[i] <- laplace(fun = qdeb,
+                          parameters = parameters,
+                          data = data.group[[i]]$y)}
+  ll <- sum(lap.est)
+  # print(c(ll, parameters))
+  return(ll)}
+```
+
+***
+
+**Estimando os parâmetros**
+
+```{r}
+est <- optim(par = c(log(mean(da$y)), log(1)),
+             fn = loglik,
+             data = da,
+             method = "BFGS",
+             control = list(fnscale = -1),
+             hessian = TRUE)
+```
+
+***
+
+**Fazendo o mesmo com a função 'pronta' do pacote `lme4`**
+
+```{r}
+model <- glmer(y ~ 1|id,
+               family = poisson(link = "log"),
+               data = da)
+```
+
+***
+
+**Tabela com a comparação das estimativas, no caso de $\sigma^{2}$ é valor predito**
+
+```{r, echo=FALSE, results='asis'}
+output <- matrix(c(round(est$par[1], 4),
+                   paste0("(", round(sqrt(diag( -solve(est$hessian)))[1], 4), ")"),
+                   round(exp(est$par[2])**2, 4),
+                   paste0("(", round(unlist(deltaMethod(object = c(sigma.l = est$par[2]),
+                                                        g = "exp(sigma.l)**2",
+                                                        vcov = solve(est$hessian)[2])[[2]]), 4), ")"),
+                   round(est$value, 4),
+                   round(summary(model)$coefficients[1], 4),
+                   paste0("(", round(summary(model)$coefficients[2], 4), ")"),
+                   round(VarCorr(model)$id[1], 4),
+                   "( - )",
+                   round(logLik(model)[1], 4)),
+                 ncol = 10)
+htmlTable(output,
+          header = rep(c("&mu;", "(se)<sup>&dagger;</sup>",
+                         "&sigma;<sup>2</sup>", "(se)<sup>&dagger;</sup>",
+                         "log verossimilhança"),
+                       times = 2),
+          rnames = FALSE,
+          cgroup = c("Implementação", "lme4"),
+          n.cgroup = c(5, 5),
+          tfoot = "<small>&dagger; Erro padrão (*standard error*)</small>")
+```
+
+***
+
+**E quando aumentamos o tamanho da base de dados?**
+
+Digamos, 50 indivíduos e 10 repetições pra cada
+
+```{r, echo=FALSE, results='asis'}
+da <- rdata(c(2, 1), 50, 10)
+est <- optim(par = c(log(mean(da$y)), log(1)),
+             fn = loglik,
+             data = da,
+             method = "BFGS",
+             control = list(fnscale = -1),
+             hessian = TRUE)
+model <- glmer(y ~ 1|id,
+               family = poisson(link = "log"),
+               data = da)
+output <- matrix(c(round(est$par[1], 4),
+                   paste0("(", round(sqrt(diag( -solve(est$hessian)))[1], 4), ")"),
+                   round(exp(est$par[2])**2, 4),
+                   paste0("(", round(unlist(deltaMethod(object = c(sigma.l = est$par[2]),
+                                                        g = "exp(sigma.l)**2",
+                                                        vcov = solve(est$hessian)[2])[[2]]), 4), ")"),
+                   round(est$value, 4),
+                   round(summary(model)$coefficients[1], 4),
+                   paste0("(", round(summary(model)$coefficients[2], 4), ")"),
+                   round(VarCorr(model)$id[1], 4),
+                   "( - )",
+                   round(logLik(model)[1], 4)),
+                 ncol = 10)
+htmlTable(output,
+          header = rep(c("&mu;", "(se)<sup>&dagger;</sup>",
+                         "&sigma;<sup>2</sup>", "(se)<sup>&dagger;</sup>",
+                         "log verossimilhança"),
+                       times = 2),
+          rnames = FALSE,
+          cgroup = c("Implementação", "lme4"),
+          n.cgroup = c(5, 5),
+          tfoot = "<small>&dagger; Erro padrão (*standard error*)</small>")
+```
+
+***

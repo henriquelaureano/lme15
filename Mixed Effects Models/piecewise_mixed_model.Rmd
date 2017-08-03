@@ -1,0 +1,1974 @@
+---
+title: "APLICAÇÃO DE MODELO MISTO DE REGRESSÃO SEGMENTADA"
+author: "Henrique Aparecido Laureano [[Lattes](http://lattes.cnpq.br/2224901552085090),
+                                      [GitLab](https://gitlab.c3sl.ufpr.br/u/hal11),
+                                      [LEG GitLab](http://git.leg.ufpr.br/u/laureano)]"
+date: "Novembro de 2015"
+output:
+  rmarkdown::html_vignette:
+    fig_cap: TRUE
+    toc: yes
+---
+
+<style type="text/css">
+#TOC {
+  margin: 0 150px;
+}
+</style>
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(cache=TRUE, cache.path="cache/", fig.path="graphs/", dpi=100, fig.align="center"
+               , comment=NA, warning=FALSE, error=FALSE, message=FALSE)
+```
+
+***
+
+# QUAIS PACKAGES SÃO UTILIZADOS?
+
+***
+
+> * `graphics`
+  * `latticeExtra`
+    + Gráficos
+  * `lme4`
+    + Modelos
+  * `wzRfun`
+    + Representação gráfica das bandas de confiança
+  * `htmlTable`
+    + Tabelas
+
+```{r packs, include=FALSE}
+rm(list = ls())
+pkg <- c("latticeExtra", "lme4", "wzRfun", "htmlTable", "car")
+sapply(pkg, library
+       , character.only = TRUE
+       , logical.return = TRUE)
+settings <- list(par.main.text = list(font = 1, just = "left", x = grid::unit(5, "mm"))
+                 , par.sub.text = list(font = 2, just = "left", x = grid::unit(5, "mm")))
+```
+
+```{r, include=FALSE}
+path <- "~/Dropbox/CE092 - 2015-2/Alunos/Henrique/Mixed Effects Models/Datasets/interrupt.txt"
+data <- read.table(path
+                   , header = TRUE
+                   , colClasses = c("factor", "integer", "integer", "factor"))
+data$Id <- factor(data$Id, 1:100)
+data$fMeses <- factor(data$Meses) ; str(data)
+```
+
+***
+
+# QUAL É A IDEIA DO DATASET?
+
+***
+
+> *Indivíduos infectados pelo HIV em terapia anti-retroviral*
+
+> * **100 indivíduos acompanhados** durante um ano (12 meses)
+    + **Para cada indivíduo** foram feitas **sete avaliações** (mês 0, 1, 2, 4, 6, 8 e 12)
+
+> * **Em cada avaliação** foi **mensurado a quantidade de CD4 no sangue** que reflete o estado do sistema imunológico do indivíduo
+    + Maior contagem de CD4, melhor sistema imunológico. Contagens abaixo de 1000 células/mm$^{3}$ sugerem que o sistema está um
+      pouco comprometido
+
+> * **50 indívuos** alocados **no grupo 1** e **50 indivíduos** alocados **no grupo 2**
+    + **Grupo 1:** **Indivíduos tratados** com terapia anti-retroviral **durante 4 meses**
+    + **Grupo 2:** **Indivíduos tratados** com terapia anti-retroviral **durante todo o período de acompanhamento**
+
+Temos então um `data.frame` com 700 linhas e 6 colunas
+
+* Indivíduo (`Id`): Fator com 100 níveis
+* `Meses`: Vetor de números inteiros com sete valores únicos. 0, 1, 2, 4, 6, 8 e 12
+* `CD4`: Vetor de números inteiros com as contagens de CD4
+* `Grupo`: Fator com 2 níveis, 1 e 2
+
+***
+
+## QUAIS OS OBJETIVOS NO ESCOPO DE INFERÊNCIA?
+
+***
+
+> * Existe diferença entre os `Grupos` em relação as contagens de `CD4`?
+
+> * E os `Meses`? Como as contagens de `CD4` se comportam com o passar dos `Meses`?
+
+***
+
+# ANÁLISE DESCRITIVA
+
+***
+
+```{r, echo=FALSE, fig.width= 8.5, fig.height=4.5, out.extra='style = "margin:0 -75px"'}
+bwplot(CD4 ~ fMeses|Grupo
+       , strip = strip.custom(var.name = "Grupo", strip.names = TRUE, bg = "white")
+       , xlab = "Meses"
+       , ylab = list(rot = 0)
+       , par.settings = settings
+       , sub = paste0("Gráficos de caixa da contagem de CD4 por mês de avaliação para cada grupo de indivíduos\n"
+                      , "com tendência estimada por suavização loess (polinômio local)")
+       , data, panel = function(...){
+         panel.bwplot(...)
+         panel.grid(v = 0, h = -1)
+         panel.loess(data$Meses, data$CD4, col = 2, lty = 2, lwd = 2)})
+```
+
+```{r, echo=FALSE, fig.width=18.5, fig.height=6.5, out.extra='style = "margin:0 -575px"'}
+g1 <- xyplot(CD4 ~ fMeses|factor(Id, c(41:50, 31:40, 21:30, 11:20, 1:10))
+             , layout = c(10, 5)
+             , type = c("p", "g", "a")
+             , pch = 16
+             , strip = strip.custom(var.name = "Id", strip.names = TRUE, bg = "white")
+             , xlab = "Meses"
+             , ylab= list(label = "CD4", rot = 0)
+             , par.settings = settings
+             , scales = list(y = list(at =seq(100, 500, 200)))
+             , sub = "Grupo 1", subset(data, Grupo == 1))
+g2 <- xyplot(CD4 ~ fMeses|factor(Id, c(91:100, 81:90, 71:80, 61:70, 51:60))
+             , layout = c(10, 5)
+             , type = c("p", "g", "a")
+             , pch = 16
+             , strip = strip.custom(var.name = "Id", strip.names = TRUE, bg = "white")
+             , xlab = "Meses"
+             , ylab= list(rot = 0)
+             , par.settings = settings
+             , scales = list(y = list(at = seq(0, 600, 200)))
+             , sub = "Grupo 2", subset(data, Grupo == 2))
+print(g1
+      , position = c(0, 0, .5, .95)
+      , more = TRUE)
+print(g2
+      , position = c(.5, 0, 1, .95))
+grid::grid.text(x = .2
+                , y = .95
+                , label = "Dispersão da contagem de CD4 para cada indivíduo por mês de avaliação")
+```
+
+***
+
+# AJUSTANDO MODELOS
+
+***
+
+> Estamos lidando com contagens de `CD4`, logo, dada a palavra 'contagens' inicialmente se pensa numa distribuição Poisson.
+  Contudo, ela também pode ser pensada como uma taxa, já que é dada por células/mm\(^{3}\)
+
+> Num primeiro momento iremos assumir uma distribuição Normal
+
+***
+
+> Como vamos utilizar um modelo segmentado criamos uma nova variável chamada `tMeses` (t de truncada)
+
+> Escolhemos utilizar um ponto de quebra igual a 4, já que sabemos que a distinção entre os grupos ocorre no mês 4
+
+```{r}
+data$tMeses <- with(data, ifelse(Meses < 4, 0, Meses - 4))
+```
+
+***
+
+## INTERCEPTO ALEATÓRIO
+
+***
+
+***
+
+### MODELO 1
+
+***
+
+O primeiro modelo proposto pode ser escrito da seguinte maneira
+
+> \[ {\rm CD4}_{ij} = \mu + \beta_{m} {\rm Meses}_{i}
+                      + \beta_{t} {\rm tMeses}_{i} + \beta_{g} {\rm Grupo}_{j} + \beta_{tg} {\rm tMeses}_{i} \cdot {\rm Grupo}_{j}
+                      + \gamma_{j}^{0} + \epsilon_{ij} \]
+
+onde \(i\) indexa o mês e \(j\) indexa o indivíduo
+
+Nesse modelo temos o efeito fixo de `Meses`, `Grupo`, e sua interação, e como efeito aleatório temos os indivíduos (`Id`)
+
+```{r}
+# lm.id: modelo linear com efeito aleatório de indivíduo (intercepto aleatório)
+lm.id <- lmer(CD4 ~ Meses + tMeses*Grupo + (1|Id), data)
+```
+
+***
+
+#### E A QUALIDADE DO AJUSTE? FICOU BOM?
+
+***
+
+*Verificação dos pressupostos e ajuste do modelo*  \
+**O ajuste do modelo se mostra satisfatório e os pressupostos são atendidos**
+
+```{r, echo=FALSE, fig.width=9, fig.height=3, out.extra='style = "margin:0 -100px"'}
+ar.1 <- xyplot(residuals(lm.id, type = "pearson") ~ fitted(lm.id)
+               , pch = 16
+               , type = c("p", "g")
+               , jitter.x = TRUE
+               , xlab = "Valores ajustados"
+               , ylab = list(label = "Resíduos\nde Pearson", rot = 0)
+               , par.settings = settings
+               , main = "(a) Ajuste do modelo"
+               , panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(fitted(lm.id), residuals(lm.id, type = "pearson"), lwd = 2, col = 2)})
+ar.2 <- xyplot(sqrt(abs(residuals(lm.id, type = "pearson"))) ~ fitted(lm.id)
+               , pch = 16
+               , type = c("p", "g")
+               , jitter.x = TRUE
+               , xlab = "Valores ajustados"
+               , ylab = list(label = expression(sqrt(abs(atop("Resíduos", "de Pearson")))), rot = 0)
+               , par.settings = settings
+               , main = "(b) Relação média - variância"
+               , panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(fitted(lm.id), sqrt(abs(residuals(lm.id, type = "pearson"))), lwd = 2, col = 2)})
+print(ar.1
+      , position = c(0, 0, .5, 1)
+      , more = TRUE)
+print(ar.2
+      , position = c(.5, 0, 1, 1))
+```
+```{r, echo=FALSE, fig.width=8, fig.height=3, out.extra='style = "margin:0 -50px"'}
+ar.3 <- qqmath(residuals(lm.id, type = "pearson")
+               , pch = 16
+               , type = c("p", "g")
+               , xlab = "Quantis teóricos"
+               , ylab = list(label = "Quantis\namostrais", rot = 0)
+               , par.settings = settings
+               , main = "(c) Normalidade") +
+  layer(panel.qqmathline(residuals(lm.id, type = "pearson"), lwd = 2, col = 2))
+ar.4 <- qqmath(unlist(ranef(lm.id))
+               , pch = 16
+               , type = c("p", "g")
+               , xlab = "Quantis teóricos"
+               , ylab = list(label = "Quantis\namostrais", rot = 0)
+               , par.settings = settings
+               , main = "(d) Normalidade (efeito aleatório)") +
+  layer(panel.qqmathline(unlist(ranef(lm.id)), lwd = 2, col = 2))
+print(ar.3
+      , position = c(0, 0, .5, 1)
+      , more = TRUE)
+print(ar.4
+      , position = c(.5, 0, 1, 1))
+```
+
+***
+
+#### INFERÊNCIA
+
+***
+
+> *Construção da banda de confiança*
+
+```{r}
+pred <- expand.grid(Meses = seq(0, 12, .2)
+                    , Grupo = levels(data$Grupo)
+                    , CD4 = 0)
+pred$tMeses <- with(pred, ifelse(Meses <= 4, 0, Meses - 4))
+X <- model.matrix(terms(lm.id), pred)
+pred$CD4 <- X %*% fixef(lm.id)
+var <- diag(X %*% tcrossprod(vcov(lm.id), X))
+tlval <- qt(p = .025
+            , df = df.residual(lm.id)) * sqrt(var)
+tuval <- qt(p = .975
+            , df = df.residual(lm.id)) * sqrt(var)
+pred$lwr <- pred$CD4 + tlval
+pred$upr <- pred$CD4 + tuval
+```
+
+```{r, echo=FALSE, fig.width= 8.5, fig.height=4.5, out.extra='style = "margin:0 -75px"'}
+xyplot(CD4 ~ Meses
+       , pch = 16
+       , jitter.x = TRUE
+       , type = c("p", "g")
+       , groups = Grupo
+       , ylab = list(rot = 0)
+       , par.settings = settings
+       , sub = "Curvas ajustadas com bandas de 95% de confiança"
+       , key = list(corner = c(.95, .05), text = list(c("Grupo 1", "Grupo 2")), lines = list(col = c("#0080ff", 6), lwd = 2))
+       , scales = list(x = list(at = c(0, 1, 2, 4, 6, 8, 12))), data) +
+  as.layer(xyplot(CD4 ~ Meses, subset(pred, Grupo == "1")
+                  , type = "l", 
+                  prepanel = prepanel.cbH
+                  , cty = "bands"
+                  , ly = subset(pred, Grupo == "1")$lwr
+                  , uy = subset(pred, Grupo == "1")$upr
+                  , panel = panel.cbH
+                  , lwd = 2
+                  , col = "#0080ff")) +
+  as.layer(xyplot(CD4 ~ Meses, subset(pred, Grupo == "2")
+                  , type = "l"
+                  , prepanel = prepanel.cbH
+                  , cty = "bands"
+                  , ly = subset(pred, Grupo == "2")$lwr
+                  , uy = subset(pred, Grupo == "2")$upr
+                  , panel = panel.cbH
+                  , lwd = 2
+                  , col = 6))
+```
+
+Nesse modelo temos o efeito principal de `tMeses` e `Grupo`, além de sua interação
+
+A presença do efeito principal de `Grupo` faz com que tenhamos duas retas distintas, uma para cada `Grupo`
+
+No gráfico acima observamos que a curva ajustada para os indivíduos do `Grupo` 2 se mostra mais elevada, i.e., indica maiores
+contagens de `CD4`. Esse comportamento já era de certa forma esperado, já que com a dispersão dos pontos dada no fundo do gráfico
+podemos observar em geral maiores contagens de `CD4` nos indivíduos do `Grupo` 2
+
+> *Lembrando. `Grupo` **1**: Indivíduos tratados com **terapia** anti-retroviral **durante 4 meses**.
+              `Grupo` **2**: Indivíduos tratados com **terapia** anti-retroviral **durante todo o período** de acompanhamento*
+
+Do ponto de quebra em diante para os indivíduos do `Grupo` 1 observamos uma queda nas contagens de `CD4`. Já nos indivíduos do
+`Grupo` 2 observamos uma estagnação
+
+Existe a hipótese de que após um determinado tempo a parada no tratamento (`Grupo` 1) é benéfica, o que é refletido em maiores
+contagens de `CD4`. Pelo gráfico vemos que essa hipótese a princípio não é confirmada
+
+Nos `Meses` em que todos os indivíduos estão sob tratamento as bandas de confiança dos grupos chegam a se sobrepor, a partir do
+ponto de quebra, i.e., quando o `Grupo` 1 para de receber o tratamento, isso já não ocorre mais
+
+**Estimativas do modelo em células/mm\(^{3}\)**
+
+```{r, echo=FALSE}
+output <- matrix(cbind(round(cbind(fixef(lm.id)[[1]], coefficients(summary(lm.id))[, 2][[1]]), 4)
+                       , round(cbind(fixef(lm.id)[[1]] + fixef(lm.id)[[4]]
+                                     , deltaMethod(object = fixef(lm.id)[c(1, 4)]
+                                                   , g = "`(Intercept)` + `Grupo2`"
+                                                   , vcov = vcov(lm.id)[c(1, 4), c(1, 4)])$SE), 4)
+                       , round(cbind(fixef(lm.id)[[2]], coefficients(summary(lm.id))[, 2][[2]]), 4)
+                       , round(cbind(fixef(lm.id)[[2]] + fixef(lm.id)[[3]]
+                                     , deltaMethod(object = fixef(lm.id)[c(2, 3)]
+                                                   , g = "`Meses` + `tMeses`"
+                                                   , vcov = vcov(lm.id)[c(2, 3), c(2, 3)])$SE), 4)
+                       , round(cbind(fixef(lm.id)[[2]] + fixef(lm.id)[[3]] + fixef(lm.id)[[5]]
+                                     , deltaMethod(object = fixef(lm.id)[c(2, 3, 5)]
+                                                   , g = "`Meses` + `tMeses` + `tMeses:Grupo2`"
+                                                   , vcov = vcov(lm.id)[c(2, 3, 5), c(2, 3, 5)])$SE), 4)
+                       , cbind(round(attr(VarCorr(lm.id)$Id, "stddev")[[1]], 4), " - ")
+                       , cbind(round(attr(VarCorr(lm.id), "sc"), 4), " - "))
+                 , ncol = 2
+                 , byrow = TRUE)
+htmlTable(output
+          , header = c("Estimativa", "Erro padrão")
+          , rnames = c("Mês 0 - `Grupo` 1", "Mês 0 - `Grupo` 2", "Inclinação - Mês &#8804; 4"
+                       , "Inclinação - `Grupo` 1", "Inclinação - `Grupo` 2" , "&sigma;<sub>Id</sub>", "&sigma;"))
+```
+
+> Considerar um efeito aleatório dos indivíduos significa inserir um diferente intercepto para cada indivíduo. As inclinações das
+  retas são as mesmas, o que muda é apenas o intercepto
+
+O desvio padrão para o intercepto é de 63.77 células/mm\(^{3}\)
+
+Existe certa variação adicional nas contagens de `CD4` com desvio padrão de 62.82. Sua alta estimativa pode indica uma considerável 
+variação mês a mês nas contagens de `CD4` dos indivíduos
+
+```{r, echo=FALSE, fig.width= 8.5, fig.height=4.5, out.extra='style = "margin:0 -75px"'}
+plot(CD4 ~ Meses
+     , main = "Curvas ajustadas por indivíduo com curvas populacionais em vermelho"
+     , las = 1, data[data$Grupo == "2", ]) ; points(CD4 ~ Meses
+                                                    , col = "#0080ff", data[data$Grupo == "1", ])
+for(i in 1:50){
+  with(coefficients(lm.id)[[1]], curve(`(Intercept)`[i] + {`Meses`[i]*x}*(x <= 4) + {`Meses`[i]*x + `tMeses`[i]*(x-4)}*(x > 4)
+                                       , add = TRUE
+                                       , lty = 2
+                                       , col = "#0080ff"))}
+for(i in 51:100){
+  with(coefficients(lm.id)[[1]], curve(`(Intercept)`[i] + `Grupo2`[i] + {`Meses`[i]*x}*(x <= 4)
+                                       + {`Meses`[i]*x + `tMeses`[i]*(x-4) + `tMeses:Grupo2`[i]*(x-4)}*(x > 4)
+                                       , add = TRUE
+                                       , lty = 2))}
+with(as.list(fixef(lm.id)), curve(`(Intercept)` + {`Meses`*x}*(x <= 4) + {`Meses`*x + `tMeses`*(x-4)}*(x > 4)
+                                  , add = TRUE
+                                  , col = 2
+                                  , lwd = 3))
+with(as.list(fixef(lm.id)), curve(`(Intercept)` + `Grupo2` + {`Meses`*x}*(x <= 4)
+                                  + {`Meses`*x + `tMeses`*(x-4) + `tMeses:Grupo2`*(x-4)}*(x > 4)
+                                  , add = TRUE
+                                  , col = 2
+                                  , lwd = 3))
+abline(v = seq(0, 12, length = 7), h = seq(100, 600, length = 6), col = "gray90")
+legend(x = 10, y = 125, c("Grupo 1", "Grupo 2"), col = c("#0080ff", 1), lty = 2, bty = "n")
+```
+
+***
+
+### MODELO 2
+
+***
+
+> \[ {\rm CD4}_{ij} = \mu + \beta_{m} {\rm Meses}_{i} + \beta_{tg} {\rm tMeses}_{i} \cdot {\rm Grupo}_{j}
+                      + \gamma_{j}^{0} + \epsilon_{ij} \]
+
+onde \(i\) indexa o mês e \(j\) indexa o indivíduo
+
+Nesse modelo temos o efeito fixo de `Meses`, sua interação com `Grupo`, e como efeito aleatório temos os indivíduos (`Id`)
+
+```{r}
+# lm2.id: modelo linear com efeito aleatório de indivíduo (intercepto aleatório)
+lm2.id <- lmer(CD4 ~ Meses + tMeses:Grupo + (1|Id), data)
+```
+
+***
+
+#### E A QUALIDADE DO AJUSTE? FICOU BOM?
+
+***
+
+*Verificação dos pressupostos e ajuste do modelo*  \
+**O ajuste do modelo se mostra satisfatório e os pressupostos são atendidos**
+
+```{r, echo=FALSE, fig.width=9, fig.height=3, out.extra='style = "margin:0 -100px"'}
+ar.1 <- xyplot(residuals(lm2.id, type = "pearson") ~ fitted(lm2.id)
+               , pch = 16
+               , type = c("p", "g")
+               , jitter.x = TRUE
+               , xlab = "Valores ajustados"
+               , ylab = list(label = "Resíduos\nde Pearson", rot = 0)
+               , par.settings = settings
+               , main = "(a) Ajuste do modelo"
+               , panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(fitted(lm2.id), residuals(lm2.id, type = "pearson"), lwd = 2, col = 2)})
+ar.2 <- xyplot(sqrt(abs(residuals(lm2.id, type = "pearson"))) ~ fitted(lm2.id)
+               , pch = 16
+               , type = c("p", "g")
+               , jitter.x = TRUE
+               , xlab = "Valores ajustados"
+               , ylab = list(label = expression(sqrt(abs(atop("Resíduos", "de Pearson")))), rot = 0)
+               , par.settings = settings
+               , main = "(b) Relação média - variância"
+               , panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(fitted(lm2.id), sqrt(abs(residuals(lm2.id, type = "pearson"))), lwd = 2, col = 2)})
+print(ar.1
+      , position = c(0, 0, .5, 1)
+      , more = TRUE)
+print(ar.2
+      , position = c(.5, 0, 1, 1))
+```
+```{r, echo=FALSE, fig.width=8, fig.height=3, out.extra='style = "margin:0 -50px"'}
+ar.3 <- qqmath(residuals(lm2.id, type = "pearson")
+               , pch = 16
+               , type = c("p", "g")
+               , xlab = "Quantis teóricos"
+               , ylab = list(label = "Quantis\namostrais", rot = 0)
+               , par.settings = settings
+               , main = "(c) Normalidade") +
+  layer(panel.qqmathline(residuals(lm2.id, type = "pearson"), lwd = 2, col = 2))
+ar.4 <- qqmath(unlist(ranef(lm2.id))
+               , pch = 16
+               , type = c("p", "g")
+               , xlab = "Quantis teóricos"
+               , ylab = list(label = "Quantis\namostrais", rot = 0)
+               , par.settings = settings
+               , main = "(d) Normalidade (efeito aleatório)") +
+  layer(panel.qqmathline(unlist(ranef(lm2.id)), lwd = 2, col = 2))
+print(ar.3
+      , position = c(0, 0, .5, 1)
+      , more = TRUE)
+print(ar.4
+      , position = c(.5, 0, 1, 1))
+```
+
+***
+
+#### INFERÊNCIA
+
+***
+
+```{r, echo=FALSE, fig.width= 8.5, fig.height=4.5, out.extra='style = "margin:0 -75px"'}
+pred <- expand.grid(Meses = seq(0, 12, .2)
+                    , Grupo = levels(data$Grupo)
+                    , CD4 = 0)
+pred$tMeses <- with(pred, ifelse(Meses <= 4, 0, Meses - 4))
+X <- model.matrix(terms(lm2.id), pred)
+pred$CD4 <- X %*% fixef(lm2.id)
+var <- diag(X %*% tcrossprod(vcov(lm2.id), X))
+tlval <- qt(p = .025
+            , df = df.residual(lm2.id)) * sqrt(var)
+tuval <- qt(p = .975
+            , df = df.residual(lm2.id)) * sqrt(var)
+pred$lwr <- pred$CD4 + tlval
+pred$upr <- pred$CD4 + tuval
+xyplot(CD4 ~ Meses
+       , pch = 16
+       , jitter.x = TRUE
+       , type = c("p", "g")
+       , groups = Grupo
+       , ylab = list(rot = 0)
+       , par.settings = settings
+       , sub = "Curvas ajustadas com bandas de 95% de confiança"
+       , key = list(corner = c(.95, .05), text = list(c("Grupo 1", "Grupo 2")), lines = list(col = c("#0080ff", 6), lwd = 2))
+       , scales = list(x = list(at = c(0, 1, 2, 4, 6, 8, 12))), data) +
+  as.layer(xyplot(CD4 ~ Meses, subset(pred, Grupo == "1")
+                  , type = "l"
+                  , prepanel = prepanel.cbH
+                  , cty = "bands"
+                  , ly = subset(pred, Grupo == "1")$lwr
+                  , uy = subset(pred, Grupo == "1")$upr
+                  , panel = panel.cbH
+                  , lwd = 2
+                  , col = "#0080ff")) +
+  as.layer(xyplot(CD4 ~ Meses, subset(pred, Grupo == "2")
+                  , type = "l"
+                  , prepanel = prepanel.cbH
+                  , cty = "bands"
+                  , ly = subset(pred, Grupo == "2")$lwr
+                  , uy = subset(pred, Grupo == "2")$upr
+                  , panel = panel.cbH
+                  , lwd = 2
+                  , col = 6))
+```
+
+Diferente do *modelo 1*, aqui não temos o efeito principal de `tMeses` e `Grupo`, apenas o efeito de sua interação
+
+A ausência do efeito principal de `Grupo` faz com que tenhamos uma única reta até o ponto de quebra, o que de certa forma faz 
+sentido, já que até o mês 4 todos estão sendo tratados
+
+As bandas de confiança não se tocam do mês 6 (aproximadamente) em diante, o que indica uma diferença significativa entre as contagens de `CD4` dos dois grupos
+
+> *Lembrando novamente. `Grupo` **1**: Indivíduos tratados com **terapia** anti-retroviral **durante 4 meses**.
+                        `Grupo` **2**: Indivíduos tratados com **terapia** anti-retroviral **durante todo o período** de acompanhamento*
+
+**Estimativas do modelo em células/mm\(^{3}\)**
+
+```{r, echo=FALSE}
+output <- matrix(cbind(round(cbind(fixef(lm2.id)[[1]], coefficients(summary(lm2.id))[, 2][[1]]), 4)
+                       , round(cbind(fixef(lm2.id)[[2]], coefficients(summary(lm2.id))[, 2][[2]]), 4)
+                       , round(cbind(fixef(lm2.id)[[2]] + fixef(lm2.id)[[3]]
+                                     , deltaMethod(object = fixef(lm2.id)[c(2, 3)]
+                                                   , g = "`Meses` + `tMeses:Grupo1`"
+                                                   , vcov = vcov(lm2.id)[c(2, 3), c(2, 3)])$SE), 4)
+                       , round(cbind(fixef(lm2.id)[[2]] + fixef(lm2.id)[[4]]
+                                     , deltaMethod(object = fixef(lm2.id)[c(2, 4)]
+                                                   , g = "`Meses` + `tMeses:Grupo2`"
+                                                   , vcov = vcov(lm2.id)[c(2, 4), c(2, 4)])$SE), 4)
+                       , cbind(round(attr(VarCorr(lm2.id)$Id, "stddev")[[1]], 4), " - ")
+                       , cbind(round(attr(VarCorr(lm2.id), "sc"), 4), " - "))
+                 , ncol = 2
+                 , byrow = TRUE)
+htmlTable(output
+          , header = c("Estimativa", "Erro padrão")
+          , rnames = c("Mês 0", "Inclinação - Mês &#8804; 4"
+                       , "Inclinação - `Grupo` 1", "Inclinação - `Grupo` 2" , "&sigma;<sub>Id</sub>", "&sigma;"))
+```
+
+```{r, echo=FALSE, fig.width= 8.5, fig.height=4.5, out.extra='style = "margin:0 -75px"'}
+plot(CD4 ~ Meses
+     , main = "Curvas ajustadas por indivíduo com curvas populacionais em vermelho"
+     , las = 1, data[data$Grupo == "2", ]) ; points(CD4 ~ Meses
+                                                    , col = "#0080ff", data[data$Grupo == "1", ])
+for(i in 1:50){
+  with(coefficients(lm2.id)[[1]], curve(`(Intercept)`[i] + {`Meses`[i]*x}*(x <= 4)
+                                        + {`Meses`[i]*x + `tMeses:Grupo1`[i]*(x-4)}*(x > 4)
+                                        , add = TRUE
+                                        , lty = 2
+                                        , col = "#0080ff"))}
+for(i in 51:100){
+  with(coefficients(lm2.id)[[1]], curve(`(Intercept)`[i] + {`Meses`[i]*x}*(x <= 4)
+                                        + {`Meses`[i]*x + `tMeses:Grupo2`[i]*(x-4)}*(x > 4)
+                                        , add = TRUE
+                                        , lty = 2))}
+with(as.list(fixef(lm2.id)), curve(`(Intercept)` + {`Meses`*x}*(x <= 4) + {`Meses`*x + `tMeses:Grupo1`*(x-4)}*(x > 4)
+                                   , add = TRUE
+                                   , col = 2
+                                   , lwd = 3))
+with(as.list(fixef(lm2.id)), curve(`(Intercept)` + {`Meses`*x}*(x <= 4) + {`Meses`*x + `tMeses:Grupo2`*(x-4)}*(x > 4)
+                                   , add = TRUE
+                                   , col = 2
+                                   , lwd = 3))
+abline(v = seq(0, 12, length = 7), h = seq(100, 600, length = 6), col = "gray90")
+legend(x = 10, y = 125, c("Grupo 1", "Grupo 2"), col = c("#0080ff", 1), lty = 2, bty = "n")
+```
+
+***
+
+### COM QUAL MODELO FICAMOS?
+
+***
+
+**Comparando as estimativas de contagens de `CD4` dos dois modelos**
+
+```{r, echo=FALSE}
+output <- matrix(cbind(round(cbind(confint(lm.id)[3], fixef(lm.id)[[1]], confint(lm.id)[10]
+                                   , confint(lm2.id)[3], fixef(lm2.id)[[1]], confint(lm2.id)[9]), 4)
+                       , round(cbind(confint(lm.id)[3] + confint(lm.id)[6], fixef(lm.id)[[1]] + fixef(lm.id)[[4]]
+                                     , confint(lm.id)[10] + confint(lm.id)[13]
+                                     , confint(lm2.id)[3], fixef(lm2.id)[[1]], confint(lm2.id)[9]), 4)
+                       , round(cbind(confint(lm.id)[4], fixef(lm.id)[[2]], confint(lm.id)[11]
+                                     , confint(lm2.id)[4], fixef(lm2.id)[[2]], confint(lm2.id)[10]), 4)
+                       , round(cbind(confint(lm.id)[4] + confint(lm.id)[5], fixef(lm.id)[[2]] + fixef(lm.id)[[3]]
+                                     , confint(lm.id)[11] + confint(lm.id)[12]
+                                     , confint(lm2.id)[4] + confint(lm2.id)[5]
+                                     , fixef(lm2.id)[[2]] + fixef(lm2.id)[[3]]
+                                     , confint(lm2.id)[10] + confint(lm2.id)[11]), 4)
+                       , round(cbind(confint(lm.id)[4] + confint(lm.id)[5] + confint(lm.id)[7]
+                                     , fixef(lm.id)[[2]] + fixef(lm.id)[[3]] + fixef(lm.id)[[5]]
+                                     , confint(lm.id)[11] + confint(lm.id)[12] + confint(lm.id)[14]
+                                     , confint(lm2.id)[4] + confint(lm2.id)[6]
+                                     , fixef(lm2.id)[[2]] + fixef(lm2.id)[[4]]
+                                     , confint(lm2.id)[10] + confint(lm2.id)[12]), 4)
+                       , round(cbind(confint(lm.id)[1], attr(VarCorr(lm.id)$Id, "stddev")[[1]], confint(lm.id)[8]
+                                     , confint(lm2.id)[1], attr(VarCorr(lm2.id)$Id, "stddev")[[1]]
+                                     , confint(lm2.id)[7]), 4)
+                       , round(cbind(confint(lm.id)[2], attr(VarCorr(lm.id), "sc"), confint(lm.id)[9]
+                                     , confint(lm2.id)[2], attr(VarCorr(lm2.id), "sc"), confint(lm2.id)[8]), 4))
+                 , ncol = 6 
+                 , byrow = TRUE)
+htmlTable(output
+          , header = rep(c("Mínimo", "Estimativa", "Máximo"), 2)
+          , rnames = c("Mês 0 - `Grupo` 1", "Mês 0 - `Grupo` 2", "Inclinação - Mês &#8804; 4"
+                       , "Inclinação - `Grupo` 1", "Inclinação - `Grupo` 2", "&sigma;<sub>Id</sub>", "&sigma;")
+          , cgroup = c("Modelo 1", "Modelo 2")
+          , n.cgroup = c(3, 3))
+```
+
+*As estimativas dos parâmetros não é um critério válido para decidir com qual modelo ficamos, mas de qualquer forma é interessante
+ compará-las*
+
+> Nas análises gráficas de resíduos verificamos que ambos os modelos ajustaram satisfatóriamente
+
+**Medidas de comparação dos modelos**
+
+```{r, echo=FALSE}
+output <- matrix(round(cbind(AIC(lm.id), BIC(lm.id), logLik(lm.id), REMLcrit(lm.id)
+                             , AIC(lm2.id), BIC(lm2.id), logLik(lm2.id), REMLcrit(lm2.id)), 4)
+                 , ncol = 8)
+htmlTable(output
+          , header = rep(c("AIC", "BIC", "logLik", "REML"), 2)
+          , cgroup = c("Modelo 1", "Modelo 2")
+          , n.cgroup = c(4, 4))
+```
+
+O AIC, BIC e REML são critérios do tipo menor é melhor, já a log verossimilhança é do tipo maior é melhor
+
+> Todos os critérios nos levam a escolher o modelo 1, i.e., o modelo com os efeitos principais de `tMeses`
+  e `Grupo`, ou seja, considerando uma curva para os indivíduos de cada `Grupo`
+
+```{r}
+anova(lm.id, lm2.id)
+```
+
+Fazendo um teste de razão de verossimilhança também ficamos com o modelo 1, como já era de se esperar dada a tabela anterior
+
+***
+
+## INTERCEPTO E INCLINAÇÃO INICIAL ALEATÓRIA
+
+***
+
+***
+
+### MODELO 3
+
+***
+
+> \[ \begin{align}
+     {\rm CD4}_{ij} & = \mu + \beta_{m} {\rm Meses}_{i}
+                        + \beta_{t} {\rm tMeses}_{i} + \beta_{g} {\rm Grupo}_{j}
+                        + \beta_{tg} {\rm tMeses}_{i} \cdot {\rm Grupo}_{j} \\
+                      & + \gamma_{j}^{0} + \gamma_{j}^{1} {\rm Meses}_{i} + \epsilon_{ij}
+     \end{align} \]
+
+onde \(i\) indexa o mês e \(j\) indexa o indivíduo
+
+O que diferencia esse modelo do modelo 1 é o acréscimo de mais um termo de efeito aleatório
+
+```{r}
+# lm.idm: modelo linear com efeito aleatório de indivíduo (intercepto aleatório)
+#         e de indivíduo dentro de meses (inclinação aleatória até o ponto de quebra)
+lm.idm <- lmer(CD4 ~ Meses + tMeses*Grupo + (Meses|Id), data)
+```
+
+***
+
+#### E A QUALIDADE DO AJUSTE? FICOU BOM?
+
+***
+
+*Verificação dos pressupostos e ajuste do modelo*  \
+**O ajuste do modelo se mostra satisfatório e os pressupostos são atendidos**
+
+```{r, echo=FALSE, fig.width=9, fig.height=3, out.extra='style = "margin:0 -100px"'}
+ar.1 <- xyplot(residuals(lm.idm, type = "pearson") ~ fitted(lm.idm)
+               , pch = 16
+               , type = c("p", "g")
+               , jitter.x = TRUE
+               , xlab = "Valores ajustados"
+               , ylab = list(label = "Resíduos\nde Pearson", rot = 0)
+               , par.settings = settings
+               , main = "(a) Ajuste do modelo"
+               , panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(fitted(lm.idm), residuals(lm.idm, type = "pearson"), lwd = 2, col = 2)})
+ar.2 <- xyplot(sqrt(abs(residuals(lm.idm, type = "pearson"))) ~ fitted(lm.idm)
+               , pch = 16
+               , type = c("p", "g")
+               , jitter.x = TRUE
+               , xlab = "Valores ajustados"
+               , ylab = list(label = expression(sqrt(abs(atop("Resíduos", "de Pearson")))), rot = 0)
+               , par.settings = settings
+               , main = "(b) Relação média - variância"
+               , panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(fitted(lm.idm), sqrt(abs(residuals(lm.idm, type = "pearson"))), lwd = 2, col = 2)})
+print(ar.1
+      , position = c(0, 0, .5, 1)
+      , more = TRUE)
+print(ar.2
+      , position = c(.5, 0, 1, 1))
+```
+```{r, echo=FALSE, fig.width=12, fig.height=3, out.extra='style = "margin:0 -250px"'}
+ar.3 <- qqmath(residuals(lm.idm, type = "pearson")
+               , pch = 16
+               , type = c("p", "g")
+               , xlab = "Quantis teóricos"
+               , ylab = list(label = "Quantis\namostrais", rot = 0)
+               , par.settings = settings
+               , main = "(c) Normalidade") +
+  layer(panel.qqmathline(residuals(lm.idm, type = "pearson"), lwd = 2, col = 2))
+ar.4 <- qqmath(unlist(ranef(lm.idm)[[1]][, 1])
+               , pch = 16
+               , type = c("p", "g")
+               , xlab = "Quantis teóricos"
+               , ylab = list(label = "Quantis\namostrais", rot = 0)
+               , par.settings = settings
+               , main = "(d) Normalidade (intercepto)") +
+  layer(panel.qqmathline(unlist(ranef(lm.idm)[[1]][, 1]), lwd = 2, col = 2))
+ar.5 <- qqmath(unlist(ranef(lm.idm)[[1]][, 2])
+               , pch = 16
+               , type = c("p", "g")
+               , xlab = "Quantis teóricos"
+               , ylab = list(label = "Quantis\namostrais", rot = 0)
+               , par.settings = settings
+               , main = "(d) Normalidade (inclinação)") +
+  layer(panel.qqmathline(unlist(ranef(lm.idm)[[1]][, 2]), lwd = 2, col = 2))
+print(ar.3
+      , position = c(0, 0, 1/3, 1)
+      , more = TRUE)
+print(ar.4
+      , position = c(1/3, 0, 2/3, 1)
+      , more = TRUE)
+print(ar.5
+      , position = c(2/3, 0, 1, 1))
+```
+
+***
+
+#### INFERÊNCIA
+
+***
+
+```{r, echo=FALSE, fig.width= 8.5, fig.height=4.5, out.extra='style = "margin:0 -75px"'}
+pred <- expand.grid(Meses = seq(0, 12, .2)
+                    , Grupo = levels(data$Grupo)
+                    , CD4 = 0)
+pred$tMeses <- with(pred, ifelse(Meses <= 4, 0, Meses - 4))
+X <- model.matrix(terms(lm.idm), pred)
+pred$CD4 <- X %*% fixef(lm.idm)
+var <- diag(X %*% tcrossprod(vcov(lm.idm), X))
+tlval <- qt(p = .025
+            , df = df.residual(lm.idm)) * sqrt(var)
+tuval <- qt(p = .975
+            , df = df.residual(lm.idm)) * sqrt(var)
+pred$lwr <- pred$CD4 + tlval
+pred$upr <- pred$CD4 + tuval
+xyplot(CD4 ~ Meses
+       , pch = 16
+       , jitter.x = TRUE
+       , type = c("p", "g")
+       , groups = Grupo
+       , ylab = list(rot = 0)
+       , par.settings = settings
+       , sub = "Curvas ajustadas com bandas de 95% de confiança"
+       , key = list(corner = c(.95, .05), text = list(c("Grupo 1", "Grupo 2")), lines = list(col = c("#0080ff", 6), lwd = 2))
+       , scales = list(x = list(at = c(0, 1, 2, 4, 6, 8, 12))), data) +
+  as.layer(xyplot(CD4 ~ Meses, subset(pred, Grupo == "1")
+                  , type = "l"
+                  , prepanel = prepanel.cbH
+                  , cty = "bands"
+                  , ly = subset(pred, Grupo == "1")$lwr
+                  , uy = subset(pred, Grupo == "1")$upr
+                  , panel = panel.cbH
+                  , lwd = 2
+                  , col = "#0080ff")) +
+  as.layer(xyplot(CD4 ~ Meses, subset(pred, Grupo == "2")
+                  , type = "l"
+                  , prepanel = prepanel.cbH
+                  , cty = "bands"
+                  , ly = subset(pred, Grupo == "2")$lwr
+                  , uy = subset(pred, Grupo == "2")$upr
+                  , panel = panel.cbH
+                  , lwd = 2
+                  , col = 6))
+```
+
+**Estimativas de efeito fixo do modelo**
+
+```{r, echo=FALSE}
+output <- matrix(cbind(round(cbind(fixef(lm.idm)[[1]], coefficients(summary(lm.idm))[, 2][[1]]), 4)
+                       , round(cbind(fixef(lm.idm)[[1]] + fixef(lm.idm)[[4]]
+                                     , deltaMethod(object = fixef(lm.idm)[c(1, 4)]
+                                                   , g = "`(Intercept)` + `Grupo2`"
+                                                   , vcov = vcov(lm.idm)[c(1, 4), c(1, 4)])$SE), 4)
+                       , round(cbind(fixef(lm.idm)[[2]], coefficients(summary(lm.idm))[, 2][[2]]), 4)
+                       , round(cbind(fixef(lm.idm)[[2]] + fixef(lm.idm)[[3]]
+                                     , deltaMethod(object = fixef(lm.idm)[2:3]
+                                                   , g = "`Meses` + `tMeses`"
+                                                   , vcov = vcov(lm.idm)[2:3, 2:3])$SE), 4)
+                       , round(cbind(fixef(lm.idm)[[2]] + fixef(lm.idm)[[3]] + fixef(lm.idm)[[5]]
+                                     , deltaMethod(object = fixef(lm.idm)[c(2:3, 5)]
+                                                   , g = "`Meses` + `tMeses` + `tMeses:Grupo2`"
+                                                   , vcov = vcov(lm.idm)[c(2:3, 5), c(2:3, 5)])$SE), 4))
+                 , ncol = 2
+                 , byrow = TRUE)
+htmlTable(output
+          , header = c("Estimativa", "Erro padrão")
+          , rnames = c("Mês 0 - `Grupo` 1", "Mês 0 - `Grupo` 2", "Inclinação - Mês &#8804; 4"
+                       , "Inclinação - `Grupo` 1", "Inclinação - `Grupo` 2"))
+```
+
+> Considerar um efeito aleatório dos indivíduos e dos indivíduos dentro dos meses significa inserir um diferente intercepto e 
+  inclinação até o ponto de quebra para cada indivíduo
+
+```{r}
+VarCorr(lm.idm)
+```
+
+O desvio padrão para o intercepto é de 65.76 células/mm\(^{3}\)
+
+O desvio padrão para a inclinação é de 0.42
+
+Existe certa variação adicional nas contagens de `CD4` com desvio padrão de 62.8
+
+```{r, echo=FALSE,fig.width= 8.5, fig.height=4.5, out.extra='style = "margin:0 -75px"'}
+splom(ranef(lm.idm)[[1]]
+      , type = c("p", "g")
+      , pch = 16
+      , varnames = c("Intercepto", "Inclinação")
+      , xlab = NULL
+      , par.settings = settings
+      , sub = "Dispersão dos efeitos aleatórios preditos para intercepto e inclinação"
+      , pscales = list(list(at = c(-100, -50, 0, 50, 100, 150), limits = c(-125, 175)), list(at = c(-.5, 0, .5))))
+```
+
+> Atente para o valor da correlação estimada entre o intercepto e a inclinação aleatória. A estimativa é de -1!
+
+> Essa correlação perfeia pode ser observada no gráfico acima
+
+> Isso mostra que o intercepto e a inclinação são altamente correlacionados e que essa correlação é negativa, i.e., para
+  baixos valores de um deles temos altos valores do outro
+
+> Observe no gráfico abaixo que as inclinações diferem pouco de um indivíduo para outro e que a baixa estimativa
+  do desvio padrão, 0.42, indica que pouca variabilidade dos dados é captada por este componente
+
+> Com base em todos os gráficos até aqui apresentados podemos afirmar que para baixos valores de intercepto temos altos
+  valores de inclinações
+
+```{r, echo=FALSE, fig.width= 8.5, fig.height=4.5, out.extra='style = "margin:0 -75px"'}
+plot(CD4 ~ Meses
+     , main = "Curvas ajustadas por indivíduo com curvas populacionais em vermelho"
+     , las = 1, data[data$Grupo == "2", ]) ; points(CD4 ~ Meses
+                                                    , col = "#0080ff", data[data$Grupo == "1", ])
+for(i in 1:50){
+  with(coefficients(lm.idm)[[1]], curve(`(Intercept)`[i] + {`Meses`[i]*x}*(x <= 4) + {`Meses`[i]*x + `tMeses`[i]*(x-4)}*(x > 4)
+                                        , add = TRUE
+                                        , lty = 2
+                                        , col = "#0080ff"))}
+for(i in 51:100){
+  with(coefficients(lm.idm)[[1]], curve(`(Intercept)`[i] + `Grupo2`[i] + {`Meses`[i]*x}*(x <= 4)
+                                        + {`Meses`[i]*x + `tMeses`[i]*(x-4) + `tMeses:Grupo2`[i]*(x-4)}*(x > 4)
+                                        , add = TRUE
+                                        , lty = 2))}
+with(as.list(fixef(lm.idm)), curve(`(Intercept)` + {`Meses`*x}*(x <= 4) + {`Meses`*x + `tMeses`*(x-4)}*(x > 4)
+                                   , add = TRUE
+                                   , col = 2
+                                   , lwd = 3))
+with(as.list(fixef(lm.idm)), curve(`(Intercept)` + `Grupo2` + {`Meses`*x}*(x <= 4)
+                                   + {`Meses`*x + `tMeses`*(x-4) + `tMeses:Grupo2`*(x-4)}*(x > 4)
+                                   , add = TRUE
+                                   , col = 2
+                                   , lwd = 3))
+abline(v = seq(0, 12, length = 7), h = seq(100, 600, length = 6), col = "gray90")
+legend(x = 10, y = 125, c("Grupo 1", "Grupo 2"), col = c("#0080ff", 1), lty = 2, bty = "n")
+```
+
+> Dada essa altíssima correlação e a baixa estimativa, há indícios de que o efeito aleatório na inclinação é desnecessário
+
+```{r}
+anova(lm.id, lm.idm)
+```
+
+> Com um teste de razão de verossimilhança comparamos o modelo 3 com o modelo 1, eles diferem pela inserção de uma inclinação
+  aleatória até o ponto de quebra
+
+> Observe que ficamos com o modelo 1, i.e., sem a inclinação aleatória até o ponto de quebra
+
+***
+
+### MODELO 4
+
+***
+
+> Por default, a função `lmer` assume que todos os coeficientes associados com o mesmo termo de efeito aleatório são correlacionados
+
+> Podemos escrever o modelo 3 considerando que o intercepto e a inclinação aleatórios são não correlacionados
+
+```{r}
+# lm2.idm: modelo linear com efeito aleatório de indivíduo (intercepto aleatório)
+#          e de indivíduo dentro de meses (inclinação aleatória até o ponto de quebra)
+#          não correlacionados
+lm2.idm <- lmer(CD4 ~ Meses + tMeses*Grupo + (Meses||Id), data)
+```
+
+***
+
+#### E A QUALIDADE DO AJUSTE? FICOU BOM?
+
+***
+
+*Verificação dos pressupostos e ajuste do modelo*  \
+**O ajuste do modelo se mostra satisfatório e os pressupostos são atendidos**
+
+```{r, echo=FALSE, fig.width=9, fig.height=3, out.extra='style = "margin:0 -100px"'}
+ar.1 <- xyplot(residuals(lm2.idm, type = "pearson") ~ fitted(lm2.idm)
+               , pch = 16
+               , type = c("p", "g")
+               , jitter.x = TRUE
+               , xlab = "Valores ajustados"
+               , ylab = list(label = "Resíduos\nde Pearson", rot = 0)
+               , par.settings = settings
+               , main = "(a) Ajuste do modelo"
+               , panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(fitted(lm2.idm), residuals(lm2.idm, type = "pearson"), lwd = 2, col = 2)})
+ar.2 <- xyplot(sqrt(abs(residuals(lm2.idm, type = "pearson"))) ~ fitted(lm2.idm)
+               , pch = 16
+               , type = c("p", "g")
+               , jitter.x = TRUE
+               , xlab = "Valores ajustados"
+               , ylab = list(label = expression(sqrt(abs(atop("Resíduos", "de Pearson")))), rot = 0)
+               , par.settings = settings
+               , main = "(b) Relação média - variância"
+               , panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(fitted(lm2.idm), sqrt(abs(residuals(lm2.idm, type = "pearson"))), lwd = 2, col = 2)})
+print(ar.1
+      , position = c(0, 0, .5, 1)
+      , more = TRUE)
+print(ar.2
+      , position = c(.5, 0, 1, 1))
+```
+```{r, echo=FALSE, fig.width=12, fig.height=3, out.extra='style = "margin:0 -250px"'}
+ar.3 <- qqmath(residuals(lm2.idm, type = "pearson")
+               , pch = 16
+               , type = c("p", "g")
+               , xlab = "Quantis teóricos"
+               , ylab = list(label = "Quantis\namostrais", rot = 0)
+               , par.settings = settings
+               , main = "(c) Normalidade") +
+  layer(panel.qqmathline(residuals(lm2.idm, type = "pearson"), lwd = 2, col = 2))
+ar.4 <- qqmath(unlist(ranef(lm2.idm)[[1]][, 1])
+               , pch = 16
+               , type = c("p", "g")
+               , xlab = "Quantis teóricos"
+               , ylab = list(label = "Quantis\namostrais", rot = 0)
+               , par.settings = settings
+               , main = "(d) Normalidade (intercepto)") +
+  layer(panel.qqmathline(unlist(ranef(lm2.idm)[[1]][, 1]), lwd = 2, col = 2))
+ar.5 <- qqmath(unlist(ranef(lm2.idm)[[1]][, 2])
+               , pch = 16
+               , type = c("p", "g")
+               , xlab = "Quantis teóricos"
+               , ylab = list(label = "Quantis\namostrais", rot = 0)
+               , par.settings = settings
+               , main = "(d) Normalidade (inclinação)") +
+  layer(panel.qqmathline(unlist(ranef(lm2.idm)[[1]][, 2]), lwd = 2, col = 2))
+print(ar.3
+      , position = c(0, 0, 1/3, 1)
+      , more = TRUE)
+print(ar.4
+      , position = c(1/3, 0, 2/3, 1)
+      , more = TRUE)
+print(ar.5
+      , position = c(2/3, 0, 1, 1))
+```
+
+***
+
+#### INFERÊNCIA
+
+***
+
+```{r, echo=FALSE, fig.width= 8.5, fig.height=4.5, out.extra='style = "margin:0 -75px"'}
+pred <- expand.grid(Meses = seq(0, 12, .2)
+                    , Grupo = levels(data$Grupo)
+                    , CD4 = 0)
+pred$tMeses <- with(pred, ifelse(Meses <= 4, 0, Meses - 4))
+X <- model.matrix(terms(lm2.idm), pred)
+pred$CD4 <- X %*% fixef(lm2.idm)
+var <- diag(X %*% tcrossprod(vcov(lm2.idm), X))
+tlval <- qt(p = .025
+            , df = df.residual(lm2.idm)) * sqrt(var)
+tuval <- qt(p = .975
+            , df = df.residual(lm2.idm)) * sqrt(var)
+pred$lwr <- pred$CD4 + tlval
+pred$upr <- pred$CD4 + tuval
+xyplot(CD4 ~ Meses
+       , pch = 16
+       , jitter.x = TRUE
+       , type = c("p", "g")
+       , groups = Grupo
+       , ylab = list(rot = 0)
+       , par.settings = settings
+       , sub = "Curvas ajustadas com bandas de 95% de confiança"
+       , key = list(corner = c(.95, .05), text = list(c("Grupo 1", "Grupo 2")), lines = list(col = c("#0080ff", 6), lwd = 2))
+       , scales = list(x = list(at = c(0, 1, 2, 4, 6, 8, 12))), data) +
+  as.layer(xyplot(CD4 ~ Meses, subset(pred, Grupo == "1")
+                  , type = "l"
+                  , prepanel = prepanel.cbH
+                  , cty = "bands"
+                  , ly = subset(pred, Grupo == "1")$lwr
+                  , uy = subset(pred, Grupo == "1")$upr
+                  , panel = panel.cbH
+                  , lwd = 2
+                  , col = "#0080ff")) +
+  as.layer(xyplot(CD4 ~ Meses, subset(pred, Grupo == "2")
+                  , type = "l"
+                  , prepanel = prepanel.cbH
+                  , cty = "bands"
+                  , ly = subset(pred, Grupo == "2")$lwr
+                  , uy = subset(pred, Grupo == "2")$upr
+                  , panel = panel.cbH
+                  , lwd = 2
+                  , col = 6))
+```
+
+**Estimativas do modelo em células/mm\(^{3}\)**
+
+```{r, echo=FALSE}
+output <- matrix(cbind(round(cbind(fixef(lm2.idm)[[1]], coefficients(summary(lm2.idm))[, 2][[1]]), 4)
+                       , round(cbind(fixef(lm2.idm)[[1]] + fixef(lm2.idm)[[4]]
+                                     , deltaMethod(object = fixef(lm2.idm)[c(1, 4)]
+                                                   , g = "`(Intercept)` + `Grupo2`"
+                                                   , vcov = vcov(lm2.idm)[c(1, 4), c(1, 4)])$SE), 4)
+                       , round(cbind(fixef(lm2.idm)[[2]], coefficients(summary(lm2.idm))[, 2][[2]]), 4)
+                       , round(cbind(fixef(lm2.idm)[[2]] + fixef(lm2.idm)[[3]]
+                                     , deltaMethod(object = fixef(lm2.idm)[c(2, 3)]
+                                                   , g = "`Meses` + `tMeses`"
+                                                   , vcov = vcov(lm2.idm)[c(2, 3), c(2, 3)])$SE), 4)
+                       , round(cbind(fixef(lm2.idm)[[2]] + fixef(lm2.idm)[[3]] + fixef(lm2.idm)[[5]]
+                                     , deltaMethod(object = fixef(lm2.idm)[c(2, 3, 5)]
+                                                   , g = "`Meses` + `tMeses` + `tMeses:Grupo2`"
+                                                   , vcov = vcov(lm2.idm)[c(2, 3, 5), c(2, 3, 5)])$SE), 4)
+                       , cbind(round(attr(VarCorr(lm2.idm)$Id, "stddev")[[1]], 4), " - ")
+                       , cbind(round(attr(VarCorr(lm2.idm)$Id.1, "stddev")[[1]], 4), " - ")
+                       , cbind(round(attr(VarCorr(lm2.idm), "sc"), 4), " - "))
+                 , ncol = 2
+                 , byrow = TRUE)
+htmlTable(output
+          , header = c("Estimativa", "Erro padrão")
+          , rnames = c("Mês 0 - `Grupo` 1", "Mês 0 - `Grupo` 2", "Inclinação - Mês &#8804; 4"
+                       , "Inclinação - `Grupo` 1", "Inclinação - `Grupo` 2"
+                       , "&sigma;<sub>Id-0</sub>", "&sigma;<sub>Id-1</sub>", "&sigma;"))
+```
+
+> Os valores das estimativas são idênticas as obtidas com o modelo 1
+
+> A única diferença é o desvio padrão da inclinação até o ponto de quebra, sua estimativa pontual é de zero
+
+> Essa estimativa nula nos diz que a presença deste coeficiente é desnecessária, já que a princípio ele não agrega na explicação
+  da variabilidade e que as variações na inclinação inicial dos indivíduos é sempre a mesma, 0, ou seja, para todos os indivíduos
+  a inclinação até o ponto de quebra é a mesma, 37.92
+
+```{r, echo=FALSE,fig.width= 8.5, fig.height=4.5, out.extra='style = "margin:0 -75px"'}
+splom(ranef(lm2.idm)[[1]]
+      , type = c("p", "g")
+      , pch = 16
+      , varnames = c("Intercepto", "Inclinação")
+      , xlab = NULL
+      , par.settings = settings
+      , sub = "Dispersão dos efeitos aleatórios preditos para intercepto e inclinação")
+```
+
+```{r, echo=FALSE, fig.width= 8.5, fig.height=4.5, out.extra='style = "margin:0 -75px"'}
+plot(CD4 ~ Meses
+     , main = "Curvas ajustadas por indivíduo com curvas populacionais em vermelho"
+     , las = 1, data[data$Grupo == "2", ]) ; points(CD4 ~ Meses
+                                                    , col = "#0080ff", data[data$Grupo == "1", ])
+for(i in 1:50){
+  with(coefficients(lm2.idm)[[1]], curve(`(Intercept)`[i] + {`Meses`[i]*x}*(x <= 4) + {`Meses`[i]*x + `tMeses`[i]*(x-4)}*(x > 4)
+                                         , add = TRUE
+                                         , lty = 2
+                                         , col = "#0080ff"))}
+for(i in 51:100){
+  with(coefficients(lm2.idm)[[1]], curve(`(Intercept)`[i] + `Grupo2`[i] + {`Meses`[i]*x}*(x <= 4)
+                                         + {`Meses`[i]*x + `tMeses`[i]*(x-4) + `tMeses:Grupo2`[i]*(x-4)}*(x > 4)
+                                         , add = TRUE
+                                         , lty = 2))}
+with(as.list(fixef(lm2.idm)), curve(`(Intercept)` + {`Meses`*x}*(x <= 4) + {`Meses`*x + `tMeses`*(x-4)}*(x > 4)
+                                    , add = TRUE
+                                    , col = 2
+                                    , lwd = 3))
+with(as.list(fixef(lm2.idm)), curve(`(Intercept)` + `Grupo2` + {`Meses`*x}*(x <= 4)
+                                    + {`Meses`*x + `tMeses`*(x-4) + `tMeses:Grupo2`*(x-4)}*(x > 4)
+                                    , add = TRUE
+                                    , col = 2
+                                    , lwd = 3))
+abline(v = seq(0, 12, length = 7), h = seq(100, 600, length = 6), col = "gray90")
+legend(x = 10, y = 125, c("Grupo 1", "Grupo 2"), col = c("#0080ff", 1), lty = 2, bty = "n")
+```
+
+> Esse último gráfico é idêntico ao obtido com o modelo 1, que difere apenas na ausência da inclinação aleatória até o ponto de quebra
+
+***
+
+```{r}
+anova(lm2.idm, lm.id)
+```
+
+> Com um teste de razão de verossimilhança comparamos o modelo 4 com o modelo 1
+
+> Observe que ficamos com o modelo 1, i.e., sem a inclinação aleatória até o ponto de quebra
+
+***
+
+### COMPARANDO OS MODELOS 3 E 4
+
+***
+
+**Comparando as estimativas de contagens de `CD4` dos dois modelos**
+
+```{r, echo=FALSE}
+output <- matrix(cbind(round(cbind(fixef(lm.idm)[[1]], coefficients(summary(lm.idm))[, 2][[1]]
+                                   , fixef(lm2.idm)[[1]], coefficients(summary(lm2.idm))[, 2][[1]]), 4)
+                       , round(cbind(fixef(lm.idm)[[1]] + fixef(lm.idm)[[4]]
+                                     , deltaMethod(object = fixef(lm.idm)[c(1, 4)]
+                                                   , g = "`(Intercept)` + `Grupo2`"
+                                                   , vcov = vcov(lm.idm)[c(1, 4), c(1, 4)])$SE
+                                     , fixef(lm2.idm)[[1]] + fixef(lm2.idm)[[4]]
+                                     , deltaMethod(object = fixef(lm2.idm)[c(1, 4)]
+                                                   , g = "`(Intercept)` + `Grupo2`"
+                                                   , vcov = vcov(lm2.idm)[c(1, 4), c(1, 4)])$SE), 4)
+                       , round(cbind(fixef(lm.idm)[[2]], coefficients(summary(lm.idm))[, 2][[2]]
+                                     , fixef(lm2.idm)[[2]], coefficients(summary(lm2.idm))[, 2][[2]]), 4)
+                       , round(cbind(fixef(lm.idm)[[2]] + fixef(lm.idm)[[3]]
+                                     , deltaMethod(object = fixef(lm.idm)[c(2, 3)]
+                                                   , g = "`Meses` + `tMeses`"
+                                                   , vcov = vcov(lm.idm)[c(2, 3), c(2, 3)])$SE
+                                     , fixef(lm2.idm)[[2]] + fixef(lm2.idm)[[3]]
+                                     , deltaMethod(object = fixef(lm2.idm)[c(2, 3)]
+                                                   , g = "`Meses` + `tMeses`"
+                                                   , vcov = vcov(lm2.idm)[c(2, 3), c(2, 3)])$SE), 4)
+                       , round(cbind(fixef(lm.idm)[[2]] + fixef(lm.idm)[[3]] + fixef(lm.idm)[[5]]
+                                     , deltaMethod(object = fixef(lm.idm)[c(2, 3, 5)]
+                                                   , g = "`Meses` + `tMeses` + `tMeses:Grupo2`"
+                                                   , vcov = vcov(lm.idm)[c(2, 3, 5), c(2, 3, 5)])$SE
+                                     , fixef(lm2.idm)[[2]] + fixef(lm2.idm)[[3]] + fixef(lm2.idm)[[5]]
+                                     , deltaMethod(object = fixef(lm2.idm)[c(2, 3, 5)]
+                                                   , g = "`Meses` + `tMeses` + `tMeses:Grupo2`"
+                                                   , vcov = vcov(lm2.idm)[c(2, 3, 5), c(2, 3, 5)])$SE), 4)
+                       , cbind(round(attr(VarCorr(lm.idm)$Id, "stddev")[[1]], 4), " - "
+                               , round(attr(VarCorr(lm2.idm)$Id, "stddev"), 4), " - ")
+                       
+                       , cbind(round(attr(VarCorr(lm.idm)$Id, "stddev")[[2]], 4), " - "
+                               , round(attr(VarCorr(lm2.idm)$Id.1, "stddev"), 4), " - ")
+                       , cbind(round(attr(VarCorr(lm.idm), "sc"), 4), " - ", round(attr(VarCorr(lm2.idm), "sc"), 4), " - "))
+                 , ncol = 4
+                 , byrow = TRUE)
+htmlTable(output
+          , header = rep(c("Estimativa", "Erro padrão"), 2)
+          , rnames = c("Mês 0 - `Grupo` 1", "Mês 0 - `Grupo` 2", "Inclinação - Mês &#8804; 4"
+                       , "Inclinação - `Grupo` 1", "Inclinação - `Grupo` 2"
+                       , "&sigma;<sub>Id-0</sub>", "&sigma;<sub>Id-1</sub>", "&sigma;")
+          , cgroup = c("Modelo 3", "Modelo 4")
+          , n.cgroup = c(2, 2))
+```
+
+> Nas análises gráficas de resíduos verificamos que ambos os modelos ajustaram satisfatóriamente
+
+**Medidas de comparação dos modelos**
+
+```{r, echo=FALSE}
+output <- matrix(round(cbind(AIC(lm.idm), BIC(lm.idm), logLik(lm.idm), REMLcrit(lm.idm)
+                             , AIC(lm2.idm), BIC(lm2.idm), logLik(lm2.idm), REMLcrit(lm2.idm)), 4)
+                 , ncol = 8)
+htmlTable(output
+          , header = rep(c("AIC", "BIC", "logLik", "REML"), 2)
+          , cgroup = c("Modelo 3", "Modelo 4")
+          , n.cgroup = c(4, 4))
+```
+
+O AIC, BIC e REML são critérios do tipo menor é melhor, já a log verossimilhança é do tipo maior é melhor
+
+> Pelo AIC e BIC ficamos com o modelo 4, pela log-verossimilhança e REML ficamos com o modelo 3. Não obstante o modelo
+  3 possui um parâmetro a mais, e o ganho na verossimilhança parece ser pequeno dado o acréscimo de um parâmetro
+
+```{r}
+anova(lm.idm, lm2.idm)
+```
+
+Fazendo um teste de razão de verossimilhança ficamos com o modelo 4
+
+> Contudo, já vimos que o modelo 1 (sem inclinação aleatória até o ponto de quebra) se mostra mais adequado que os modelos 3 e 4
+
+***
+
+## INTERCEPTO E INCLINAÇÃO FINAL ALEATÓRIA
+
+***
+
+***
+
+### MODELO 5
+
+***
+
+> \[ \begin{align}
+     {\rm CD4}_{ij} & = \mu + \beta_{m} {\rm Meses}_{i}
+                        + \beta_{t} {\rm tMeses}_{i} + \beta_{g} {\rm Grupo}_{j}
+                        + \beta_{tg} {\rm tMeses}_{i} \cdot {\rm Grupo}_{j} \\
+                      & + \gamma_{j}^{0} + \gamma_{j}^{1} {\rm tMeses}_{i} + \epsilon_{ij}
+     \end{align} \]
+
+onde \(i\) indexa o mês e \(j\) indexa o indivíduo
+
+O que diferencia esse modelo do modelo 1 é o acréscimo de mais um termo de efeito aleatório
+
+```{r}
+# lm.idt: modelo linear com efeito aleatório de indivíduo (intercepto aleatório)
+#         e de indivíduo dentro de tmeses (inclinação aleatória depois do ponto de quebra)
+lm.idt <- lmer(CD4 ~ Meses + tMeses*Grupo + (tMeses|Id), data)
+```
+
+***
+
+#### E A QUALIDADE DO AJUSTE? FICOU BOM?
+
+***
+
+*Verificação dos pressupostos e ajuste do modelo*  \
+**O ajuste do modelo se mostra satisfatório e os pressupostos são atendidos**
+
+```{r, echo=FALSE, fig.width=9, fig.height=3, out.extra='style = "margin:0 -100px"'}
+ar.1 <- xyplot(residuals(lm.idt, type = "pearson") ~ fitted(lm.idt)
+               , pch = 16
+               , type = c("p", "g")
+               , jitter.x = TRUE
+               , xlab = "Valores ajustados"
+               , ylab = list(label = "Resíduos\nde Pearson", rot = 0)
+               , par.settings = settings
+               , main = "(a) Ajuste do modelo"
+               , panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(fitted(lm.idt), residuals(lm.idt, type = "pearson"), lwd = 2, col = 2)})
+ar.2 <- xyplot(sqrt(abs(residuals(lm.idt, type = "pearson"))) ~ fitted(lm.idt)
+               , pch = 16
+               , type = c("p", "g")
+               , jitter.x = TRUE
+               , xlab = "Valores ajustados"
+               , ylab = list(label = expression(sqrt(abs(atop("Resíduos", "de Pearson")))), rot = 0)
+               , par.settings = settings
+               , main = "(b) Relação média - variância"
+               , panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(fitted(lm.idt), sqrt(abs(residuals(lm.idt, type = "pearson"))), lwd = 2, col = 2)})
+print(ar.1
+      , position = c(0, 0, .5, 1)
+      , more = TRUE)
+print(ar.2
+      , position = c(.5, 0, 1, 1))
+```
+```{r, echo=FALSE, fig.width=12, fig.height=3, out.extra='style = "margin:0 -250px"'}
+ar.3 <- qqmath(residuals(lm.idt, type = "pearson")
+               , pch = 16
+               , type = c("p", "g")
+               , xlab = "Quantis teóricos"
+               , ylab = list(label = "Quantis\namostrais", rot = 0)
+               , par.settings = settings
+               , main = "(c) Normalidade") +
+  layer(panel.qqmathline(residuals(lm.idt, type = "pearson"), lwd = 2, col = 2))
+ar.4 <- qqmath(unlist(ranef(lm.idt)[[1]][, 1])
+               , pch = 16
+               , type = c("p", "g")
+               , xlab = "Quantis teóricos"
+               , ylab = list(label = "Quantis\namostrais", rot = 0)
+               , par.settings = settings
+               , main = "(d) Normalidade (intercepto)") +
+  layer(panel.qqmathline(unlist(ranef(lm.idt)[[1]][, 1]), lwd = 2, col = 2))
+ar.5 <- qqmath(unlist(ranef(lm.idt)[[1]][, 2])
+               , pch = 16
+               , type = c("p", "g")
+               , xlab = "Quantis teóricos"
+               , ylab = list(label = "Quantis\namostrais", rot = 0)
+               , par.settings = settings
+               , main = "(d) Normalidade (inclinação)") +
+  layer(panel.qqmathline(unlist(ranef(lm.idt)[[1]][, 2]), lwd = 2, col = 2))
+print(ar.3
+      , position = c(0, 0, 1/3, 1)
+      , more = TRUE)
+print(ar.4
+      , position = c(1/3, 0, 2/3, 1)
+      , more = TRUE)
+print(ar.5
+      , position = c(2/3, 0, 1, 1))
+```
+
+***
+
+#### INFERÊNCIA
+
+***
+
+```{r, echo=FALSE, fig.width= 8.5, fig.height=4.5, out.extra='style = "margin:0 -75px"'}
+pred <- expand.grid(Meses = seq(0, 12, .2)
+                    , Grupo = levels(data$Grupo)
+                    , CD4 = 0)
+pred$tMeses <- with(pred, ifelse(Meses <= 4, 0, Meses - 4))
+X <- model.matrix(terms(lm.idt), pred)
+pred$CD4 <- X %*% fixef(lm.idt)
+var <- diag(X %*% tcrossprod(vcov(lm.idt), X))
+tlval <- qt(p = .025
+            , df = df.residual(lm.idt)) * sqrt(var)
+tuval <- qt(p = .975
+            , df = df.residual(lm.idt)) * sqrt(var)
+pred$lwr <- pred$CD4 + tlval
+pred$upr <- pred$CD4 + tuval
+xyplot(CD4 ~ Meses
+       , pch = 16
+       , jitter.x = TRUE
+       , type = c("p", "g")
+       , groups = Grupo
+       , ylab = list(rot = 0)
+       , par.settings = settings
+       , sub = "Curvas ajustadas com bandas de 95% de confiança"
+       , key = list(corner = c(.95, .05), text = list(c("Grupo 1", "Grupo 2")), lines = list(col = c("#0080ff", 6), lwd = 2))
+       , scales = list(x = list(at = c(0, 1, 2, 4, 6, 8, 12))), data) +
+  as.layer(xyplot(CD4 ~ Meses, subset(pred, Grupo == "1")
+                  , type = "l"
+                  , prepanel = prepanel.cbH
+                  , cty = "bands"
+                  , ly = subset(pred, Grupo == "1")$lwr
+                  , uy = subset(pred, Grupo == "1")$upr
+                  , panel = panel.cbH
+                  , lwd = 2
+                  , col = "#0080ff")) +
+  as.layer(xyplot(CD4 ~ Meses, subset(pred, Grupo == "2")
+                  , type = "l"
+                  , prepanel = prepanel.cbH
+                  , cty = "bands"
+                  , ly = subset(pred, Grupo == "2")$lwr
+                  , uy = subset(pred, Grupo == "2")$upr
+                  , panel = panel.cbH
+                  , lwd = 2
+                  , col = 6))
+```
+
+**Estimativas de efeito fixo do modelo em células/mm\(^{3}\)**
+
+```{r, echo=FALSE}
+output <- matrix(cbind(round(cbind(fixef(lm.idt)[[1]], coefficients(summary(lm.idt))[, 2][[1]]), 4)
+                       , round(cbind(fixef(lm.idt)[[1]] + fixef(lm.idt)[[4]]
+                                     , deltaMethod(object = fixef(lm.idt)[c(1, 4)]
+                                                   , g = "`(Intercept)` + `Grupo2`"
+                                                   , vcov = vcov(lm.idt)[c(1, 4), c(1, 4)])$SE), 4)
+                       , round(cbind(fixef(lm.idt)[[2]], coefficients(summary(lm.idt))[, 2][[2]]), 4)
+                       , round(cbind(fixef(lm.idt)[[2]] + fixef(lm.idt)[[3]]
+                                     , deltaMethod(object = fixef(lm.idt)[c(2, 3)]
+                                                   , g = "`Meses` + `tMeses`"
+                                                   , vcov = vcov(lm.idt)[c(2, 3), c(2, 3)])$SE), 4)
+                       , round(cbind(fixef(lm.idt)[[2]] + fixef(lm.idt)[[3]] + fixef(lm.idt)[[5]]
+                                     , deltaMethod(object = fixef(lm.idt)[c(2, 3, 5)]
+                                                   , g = "`Meses` + `tMeses` + `tMeses:Grupo2`"
+                                                   , vcov = vcov(lm.idt)[c(2, 3, 5), c(2, 3, 5)])$SE), 4))
+                 , ncol = 2
+                 , byrow = TRUE)
+htmlTable(output
+          , header = c("Estimativa", "Erro padrão")
+          , rnames = c("Mês 0 - `Grupo` 1", "Mês 0 - `Grupo` 2", "Inclinação - Mês &#8804; 4"
+                       , "Inclinação - `Grupo` 1", "Inclinação - `Grupo` 2"))
+```
+
+> Considerar um efeito aleatório dos indivíduos e dos indivíduos dentro de `tMeses` significa inserir um diferente intercepto e 
+  inclinação depois do ponto de quebra para cada indivíduo
+
+```{r}
+VarCorr(lm.idt)
+```
+
+> Atente para o valor da correlação estimada entre o intercepto e a inclinação aleatórios. A estimativa é de -1
+
+> Isso mostra que o intercepto e a inclinação são altamente correlacionados e que essa correlação é negativa, i.e.,
+  para baixos valores de um deles temos altos valores do outro
+
+```{r, echo=FALSE,fig.width= 8.5, fig.height=4.5, out.extra='style = "margin:0 -75px"'}
+splom(ranef(lm.idt)[[1]]
+      , type = c("p", "g")
+      , pch = 16
+      , varnames = c("Intercepto", "Inclinação")
+      , xlab = NULL
+      , par.settings = settings
+      , sub = "Dispersão dos efeitos aleatórios preditos para intercepto e inclinação"
+      , pscales = list(list(at = c(-100, -50, 0, 50, 100, 150), limits = c(-125, 175))
+                       , list(at = c(-1.5, -.5, .5, 1.5), limits = c(-1.75, 1.75))))
+```
+
+```{r, echo=FALSE, fig.width= 8.5, fig.height=4.5, out.extra='style = "margin:0 -75px"'}
+plot(CD4 ~ Meses
+     , main = "Curvas ajustadas por indivíduo com curvas populacionais em vermelho"
+     , las = 1, data[data$Grupo == "2", ]) ; points(CD4 ~ Meses
+                                                    , col = "#0080ff", data[data$Grupo == "1", ])
+for(i in 1:50){
+  with(coefficients(lm.idt)[[1]], curve(`(Intercept)`[i] + {`Meses`[i]*x}*(x <= 4) + {`Meses`[i]*x + `tMeses`[i]*(x-4)}*(x > 4)
+                                        , add = TRUE
+                                        , lty = 2
+                                        , col = "#0080ff"))}
+for(i in 51:100){
+  with(coefficients(lm.idt)[[1]], curve(`(Intercept)`[i] + `Grupo2`[i] + {`Meses`[i]*x}*(x <= 4)
+                                        + {`Meses`[i]*x + `tMeses`[i]*(x-4) + `tMeses:Grupo2`[i]*(x-4)}*(x > 4)
+                                        , add = TRUE
+                                        , lty = 2))}
+with(as.list(fixef(lm.idt)), curve(`(Intercept)` + {`Meses`*x}*(x <= 4) + {`Meses`*x + `tMeses`*(x-4)}*(x > 4)
+                                   , add = TRUE
+                                   , col = 2
+                                   , lwd = 3))
+with(as.list(fixef(lm.idt)), curve(`(Intercept)` + `Grupo2` + {`Meses`*x}*(x <= 4)
+                                   + {`Meses`*x + `tMeses`*(x-4) + `tMeses:Grupo2`*(x-4)}*(x > 4)
+                                   , add = TRUE
+                                   , col = 2
+                                   , lwd = 3))
+abline(v = seq(0, 12, length = 7), h = seq(100, 600, length = 6), col = "gray90")
+legend(x = 10, y = 125, c("Grupo 1", "Grupo 2"), col = c("#0080ff", 1), lty = 2, bty = "n")
+```
+
+***
+
+```{r}
+anova(lm.idt, lm.id)
+```
+
+> Com um teste de razão de verossimilhança comparamos o modelo 5 com o modelo 1
+
+> Observe que ficamos com o modelo 1, i.e., sem a inclinação aleatória depois do ponto de quebra
+
+***
+
+### MODELO 6
+
+***
+
+> Podemos escrever o modelo 5 considerando que o intercepto e a inclinação aleatórios são não correlacionados
+
+```{r}
+# lm2.idt: modelo linear com efeito aleatório de indivíduo (intercepto aleatório)
+#          e de indivíduo dentro de meses (inclinação aleatória depois do ponto de quebra)
+#          não correlacionados
+lm2.idt <- lmer(CD4 ~ Meses + tMeses*Grupo + (tMeses||Id), data)
+```
+
+***
+
+#### E A QUALIDADE DO AJUSTE? FICOU BOM?
+
+***
+
+*Verificação dos pressupostos e ajuste do modelo*  \
+**O ajuste do modelo se mostra satisfatório e os pressupostos são atendidos**
+
+```{r, echo=FALSE, fig.width=9, fig.height=3, out.extra='style = "margin:0 -100px"'}
+ar.1 <- xyplot(residuals(lm2.idt, type = "pearson") ~ fitted(lm2.idt)
+               , pch = 16
+               , type = c("p", "g")
+               , jitter.x = TRUE
+               , xlab = "Valores ajustados"
+               , ylab = list(label = "Resíduos\nde Pearson", rot = 0)
+               , par.settings = settings
+               , main = "(a) Ajuste do modelo"
+               , panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(fitted(lm2.idt), residuals(lm2.idt, type = "pearson"), lwd = 2, col = 2)})
+ar.2 <- xyplot(sqrt(abs(residuals(lm2.idt, type = "pearson"))) ~ fitted(lm2.idt)
+               , pch = 16
+               , type = c("p", "g")
+               , jitter.x = TRUE
+               , xlab = "Valores ajustados"
+               , ylab = list(label = expression(sqrt(abs(atop("Resíduos", "de Pearson")))), rot = 0)
+               , par.settings = settings
+               , main = "(b) Relação média - variância"
+               , panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(fitted(lm2.idt), sqrt(abs(residuals(lm2.idt, type = "pearson"))), lwd = 2, col = 2)})
+print(ar.1
+      , position = c(0, 0, .5, 1)
+      , more = TRUE)
+print(ar.2
+      , position = c(.5, 0, 1, 1))
+```
+```{r, echo=FALSE, fig.width=12, fig.height=3, out.extra='style = "margin:0 -250px"'}
+ar.3 <- qqmath(residuals(lm2.idt, type = "pearson")
+               , pch = 16
+               , type = c("p", "g")
+               , xlab = "Quantis teóricos"
+               , ylab = list(label = "Quantis\namostrais", rot = 0)
+               , par.settings = settings
+               , main = "(c) Normalidade") +
+  layer(panel.qqmathline(residuals(lm2.idt, type = "pearson"), lwd = 2, col = 2))
+ar.4 <- qqmath(unlist(ranef(lm2.idt)[[1]][, 1])
+               , pch = 16
+               , type = c("p", "g")
+               , xlab = "Quantis teóricos"
+               , ylab = list(label = "Quantis\namostrais", rot = 0)
+               , par.settings = settings
+               , main = "(d) Normalidade (intercepto)") +
+  layer(panel.qqmathline(unlist(ranef(lm2.idt)[[1]][, 1]), lwd = 2, col = 2))
+ar.5 <- qqmath(unlist(ranef(lm2.idt)[[1]][, 2])
+               , pch = 16
+               , type = c("p", "g")
+               , xlab = "Quantis teóricos"
+               , ylab = list(label = "Quantis\namostrais", rot = 0)
+               , par.settings = settings
+               , main = "(d) Normalidade (inclinação)") +
+  layer(panel.qqmathline(unlist(ranef(lm2.idt)[[1]][, 2]), lwd = 2, col = 2))
+print(ar.3
+      , position = c(0, 0, 1/3, 1)
+      , more = TRUE)
+print(ar.4
+      , position = c(1/3, 0, 2/3, 1)
+      , more = TRUE)
+print(ar.5
+      , position = c(2/3, 0, 1, 1))
+```
+
+***
+
+#### INFERÊNCIA
+
+***
+
+```{r, echo=FALSE, fig.width= 8.5, fig.height=4.5, out.extra='style = "margin:0 -75px"'}
+pred <- expand.grid(Meses = seq(0, 12, .2)
+                    , Grupo = levels(data$Grupo)
+                    , CD4 = 0)
+pred$tMeses <- with(pred, ifelse(Meses <= 4, 0, Meses - 4))
+X <- model.matrix(terms(lm2.idt), pred)
+pred$CD4 <- X %*% fixef(lm2.idt)
+var <- diag(X %*% tcrossprod(vcov(lm2.idt), X))
+tlval <- qt(p = .025
+            , df = df.residual(lm2.idt)) * sqrt(var)
+tuval <- qt(p = .975
+            , df = df.residual(lm2.idt)) * sqrt(var)
+pred$lwr <- pred$CD4 + tlval
+pred$upr <- pred$CD4 + tuval
+xyplot(CD4 ~ Meses
+       , pch = 16
+       , jitter.x = TRUE
+       , type = c("p", "g")
+       , groups = Grupo
+       , ylab = list(rot = 0)
+       , par.settings = settings
+       , sub = "Curvas ajustadas com bandas de 95% de confiança"
+       , key = list(corner = c(.95, .05), text = list(c("Grupo 1", "Grupo 2")), lines = list(col = c("#0080ff", 6), lwd = 2))
+       , scales = list(x = list(at = c(0, 1, 2, 4, 6, 8, 12))), data) +
+  as.layer(xyplot(CD4 ~ Meses, subset(pred, Grupo == "1")
+                  , type = "l"
+                  , prepanel = prepanel.cbH
+                  , cty = "bands"
+                  , ly = subset(pred, Grupo == "1")$lwr
+                  , uy = subset(pred, Grupo == "1")$upr
+                  , panel = panel.cbH
+                  , lwd = 2
+                  , col = "#0080ff")) +
+  as.layer(xyplot(CD4 ~ Meses, subset(pred, Grupo == "2")
+                  , type = "l"
+                  , prepanel = prepanel.cbH
+                  , cty = "bands"
+                  , ly = subset(pred, Grupo == "2")$lwr
+                  , uy = subset(pred, Grupo == "2")$upr
+                  , panel = panel.cbH
+                  , lwd = 2
+                  , col = 6))
+```
+
+**Estimativas do modelo**
+
+```{r, echo=FALSE}
+output <- matrix(cbind(round(cbind(fixef(lm2.idt)[[1]], coefficients(summary(lm2.idt))[, 2][[1]]), 4)
+                       , round(cbind(fixef(lm2.idt)[[1]] + fixef(lm2.idt)[[4]]
+                                     , deltaMethod(object = fixef(lm2.idt)[c(1, 4)]
+                                                   , g = "`(Intercept)` + `Grupo2`"
+                                                   , vcov = vcov(lm2.idt)[c(1, 4), c(1, 4)])$SE), 4)
+                       , round(cbind(fixef(lm2.idt)[[2]], coefficients(summary(lm2.idt))[, 2][[2]]), 4)
+                       , round(cbind(fixef(lm2.idt)[[2]] + fixef(lm2.idt)[[3]]
+                                     , deltaMethod(object = fixef(lm2.idt)[c(2, 3)]
+                                                   , g = "`Meses` + `tMeses`"
+                                                   , vcov = vcov(lm2.idt)[c(2, 3), c(2, 3)])$SE), 4)
+                       , round(cbind(fixef(lm2.idt)[[2]] + fixef(lm2.idt)[[3]] + fixef(lm2.idt)[[5]]
+                                     , deltaMethod(object = fixef(lm2.idt)[c(2, 3, 5)]
+                                                   , g = "`Meses` + `tMeses` + `tMeses:Grupo2`"
+                                                   , vcov = vcov(lm2.idt)[c(2, 3, 5), c(2, 3, 5)])$SE), 4)
+                       , cbind(round(attr(VarCorr(lm2.idt)$Id, "stddev")[[1]], 4), " - ")
+                       , cbind(round(attr(VarCorr(lm2.idt)$Id.1, "stddev")[[1]], 4), " - ")
+                       , cbind(round(attr(VarCorr(lm2.idt), "sc"), 4), " - "))
+                 , ncol = 2
+                 , byrow = TRUE)
+htmlTable(output
+          , header = c("Estimativa", "Erro padrão")
+          , rnames = c("Mês 0 - `Grupo` 1", "Mês 0 - `Grupo` 2", "Inclinação - Mês &#8804; 4"
+                       , "Inclinação - `Grupo` 1", "Inclinação - `Grupo` 2"
+                       , "&sigma;<sub>Id-0</sub>", "&sigma;<sub>Id-1</sub>", "&sigma;"))
+```
+
+> Os valores das estimativas são idênticas as obtidas com o modelo 1
+
+> A única diferença é o desvio padrão da inclinação depois do ponto de quebra, sua estimativa pontual é de zero
+
+> Essa estimativa nula nos diz que a presença deste coeficiente é desnecessária, já que a princípio ele não agrega
+  na explicação da variabilidade e que as variações na inclinação dos indivíduos é sempre a mesma, 0
+
+```{r, echo=FALSE,fig.width= 8.5, fig.height=4.5, out.extra='style = "margin:0 -75px"'}
+splom(ranef(lm2.idt)[[1]]
+      , type = c("p", "g")
+      , pch = 16
+      , varnames = c("Intercepto", "Inclinação")
+      , xlab = NULL
+      , par.settings = settings
+      , sub = "Dispersão dos efeitos aleatórios preditos para intercepto e inclinação")
+```
+
+```{r, echo=FALSE, fig.width= 8.5, fig.height=4.5, out.extra='style = "margin:0 -75px"'}
+plot(CD4 ~ Meses
+     , main = "Curvas ajustadas por indivíduo com curvas populacionais em vermelho"
+     , las = 1, data[data$Grupo == "2", ]) ; points(CD4 ~ Meses
+                                                    , col = "#0080ff", data[data$Grupo == "1", ])
+for(i in 1:50){
+  with(coefficients(lm2.idt)[[1]], curve(`(Intercept)`[i] + {`Meses`[i]*x}*(x <= 4) + {`Meses`[i]*x + `tMeses`[i]*(x-4)}*(x > 4)
+                                         , add = TRUE
+                                         , lty = 2
+                                         , col = "#0080ff"))}
+for(i in 51:100){
+  with(coefficients(lm2.idt)[[1]], curve(`(Intercept)`[i] + `Grupo2`[i] + {`Meses`[i]*x}*(x <= 4)
+                                         + {`Meses`[i]*x + `tMeses`[i]*(x-4) + `tMeses:Grupo2`[i]*(x-4)}*(x > 4)
+                                         , add = TRUE
+                                         , lty = 2))}
+with(as.list(fixef(lm2.idt)), curve(`(Intercept)` + {`Meses`*x}*(x <= 4) + {`Meses`*x + `tMeses`*(x-4)}*(x > 4)
+                                    , add = TRUE
+                                    , col = 2
+                                    , lwd = 3))
+with(as.list(fixef(lm2.idt)), curve(`(Intercept)` + `Grupo2` + {`Meses`*x}*(x <= 4)
+                                    + {`Meses`*x + `tMeses`*(x-4) + `tMeses:Grupo2`*(x-4)}*(x > 4)
+                                    , add = TRUE
+                                    , col = 2
+                                    , lwd = 3))
+abline(v = seq(0, 12, length = 7), h = seq(100, 600, length = 6), col = "gray90")
+legend(x = 10, y = 125, c("Grupo 1", "Grupo 2"), col = c("#0080ff", 1), lty = 2, bty = "n")
+```
+
+> Esse último gráfico é idêntico ao obtido com o modelo 1
+
+***
+
+```{r}
+anova(lm2.idt, lm.id)
+```
+
+> Com um teste de razão de verossimilhança comparamos o modelo 6 com o modelo 1, eles diferem
+  pela inserção de uma inclinação aleatória depois do ponto de quebra
+
+> Observe que ficamos com o modelo 1, i.e., sem a inclinação aleatória até o ponto de quebra
+
+***
+
+### COMPARANDO OS MODELOS 5 E 6
+
+***
+
+**Comparando as estimativas de contagens de `CD4` dos dois modelos**
+
+```{r, echo=FALSE}
+output <- matrix(cbind(round(cbind(fixef(lm.idt)[[1]], coefficients(summary(lm.idt))[, 2][[1]]
+                                   , fixef(lm2.idt)[[1]], coefficients(summary(lm2.idt))[, 2][[1]]), 4)
+                       , round(cbind(fixef(lm.idt)[[1]] + fixef(lm.idt)[[4]]
+                                     , deltaMethod(object = fixef(lm.idt)[c(1, 4)]
+                                                   , g = "`(Intercept)` + `Grupo2`"
+                                                   , vcov = vcov(lm.idt)[c(1, 4), c(1, 4)])$SE
+                                     , fixef(lm2.idt)[[1]] + fixef(lm2.idt)[[4]]
+                                     , deltaMethod(object = fixef(lm2.idt)[c(1, 4)]
+                                                   , g = "`(Intercept)` + `Grupo2`"
+                                                   , vcov = vcov(lm2.idt)[c(1, 4), c(1, 4)])$SE), 4)
+                       , round(cbind(fixef(lm.idt)[[2]], coefficients(summary(lm.idt))[, 2][[2]]
+                                     , fixef(lm2.idt)[[2]], coefficients(summary(lm2.idt))[, 2][[2]]), 4)
+                       , round(cbind(fixef(lm.idt)[[2]] + fixef(lm.idt)[[3]]
+                                     , deltaMethod(object = fixef(lm.idt)[c(2, 3)]
+                                                   , g = "`Meses` + `tMeses`"
+                                                   , vcov = vcov(lm.idt)[c(2, 3), c(2, 3)])$SE
+                                     , fixef(lm2.idt)[[2]] + fixef(lm2.idt)[[3]]
+                                     , deltaMethod(object = fixef(lm2.idt)[c(2, 3)]
+                                                   , g = "`Meses` + `tMeses`"
+                                                   , vcov = vcov(lm2.idt)[c(2, 3), c(2, 3)])$SE), 4)
+                       , round(cbind(fixef(lm.idt)[[2]] + fixef(lm.idt)[[3]] + fixef(lm.idt)[[5]]
+                                     , deltaMethod(object = fixef(lm.idt)[c(2, 3, 5)]
+                                                   , g = "`Meses` + `tMeses` + `tMeses:Grupo2`"
+                                                   , vcov = vcov(lm.idt)[c(2, 3, 5), c(2, 3, 5)])$SE
+                                     , fixef(lm2.idt)[[2]] + fixef(lm2.idt)[[3]] + fixef(lm2.idt)[[5]]
+                                     , deltaMethod(object = fixef(lm2.idt)[c(2, 3, 5)]
+                                                   , g = "`Meses` + `tMeses` + `tMeses:Grupo2`"
+                                                   , vcov = vcov(lm2.idt)[c(2, 3, 5), c(2, 3, 5)])$SE), 4)
+                       , cbind(round(attr(VarCorr(lm.idt)$Id, "stddev")[[1]], 4), " - "
+                               , round(attr(VarCorr(lm2.idt)$Id, "stddev"), 4), " - ")
+                       
+                       , cbind(round(attr(VarCorr(lm.idt)$Id, "stddev")[[2]], 4), " - "
+                               , round(attr(VarCorr(lm2.idt)$Id.1, "stddev"), 4), " - ")
+                       , cbind(round(attr(VarCorr(lm.idt), "sc"), 4), " - ", round(attr(VarCorr(lm2.idt), "sc"), 4), " - "))
+                 , ncol = 4
+                 , byrow = TRUE)
+htmlTable(output
+          , header = rep(c("Estimativa", "Erro padrão"), 2)
+          , rnames = c("Mês 0 - `Grupo` 1", "Mês 0 - `Grupo` 2", "Inclinação - Mês &#8804; 4"
+                       , "Inclinação - `Grupo` 1", "Inclinação - `Grupo` 2"
+                       , "&sigma;<sub>Id-0</sub>", "&sigma;<sub>Id-1</sub>", "&sigma;")
+          , cgroup = c("Modelo 3", "Modelo 4")
+          , n.cgroup = c(2, 2))
+```
+
+> Nas análises gráficas de resíduos verificamos que ambos os modelos ajustaram satisfatóriamente
+
+**Medidas de comparação dos modelos**
+
+```{r, echo=FALSE}
+output <- matrix(round(cbind(AIC(lm.idt), BIC(lm.idt), logLik(lm.idt), REMLcrit(lm.idt)
+                             , AIC(lm2.idt), BIC(lm2.idt), logLik(lm2.idt), REMLcrit(lm2.idt)), 4)
+                 , ncol = 8)
+htmlTable(output
+          , header = rep(c("AIC", "BIC", "logLik", "REML"), 2)
+          , cgroup = c("Modelo 5", "Modelo 6")
+          , n.cgroup = c(4, 4))
+```
+
+O AIC, BIC e REML são critérios do tipo menor é melhor, já a log verossimilhança é do tipo maior é melhor
+
+> Pelo AIC e BIC ficamos com o modelo 6, pela log-verossimilhança e REML ficamos com o modelo 5. Não obstante o modelo
+  5 possui um parâmetro a mais, e o ganho na verossimilhança parece ser pequeno dado o acréscimo de um parâmetro
+
+```{r}
+anova(lm.idt, lm2.idt)
+```
+
+Fazendo um teste de razão de verossimilhança ficamos com o modelo 5
+
+> Contudo, já vimos que o modelo 1 (sem inclinação aleatória depois do ponto de quebra) se mostra mais adequado que os modelos 5 e 6
+
+***
+
+## INTERCEPTO ALEATÓRIO E FUNÇÃO QUADRÁTICA ATÉ O PONTO DE QUEBRA
+
+***
+
+***
+
+### MODELO 7
+
+***
+
+Por enquanto ficamos com o modelo 1, i.e., ficamos com o modelo apenas com o intercepto aleatório
+
+Até agora estamos ajustando retas, mas podemos pensar numa curva quadrática até o ponto de quebra
+
+> \[ \begin{align}
+     {\rm CD4}_{ij} & = \mu + \beta_{m} {\rm Meses}_{i} + \beta_{t2} {\rm Meses}_{i}^{2}
+                        + \beta_{t} {\rm tMeses}_{i} + \beta_{g} {\rm Grupo}_{j}
+                        + \beta_{tg} {\rm tMeses}_{i} \cdot {\rm Grupo}_{j} \\
+                      & + \gamma_{j}^{0} + \epsilon_{ij}
+     \end{align} \]
+
+onde \(i\) indexa o mês e \(j\) indexa o indivíduo
+
+```{r}
+# lm.id2: modelo linear com efeito aleatório de indivíduo (intercepto aleatório)
+#         e termo quadrático até o ponto de quebra
+lm.id2 <- lmer(CD4 ~ Meses + I(Meses**2) + tMeses*Grupo + (1|Id), data)
+```
+
+***
+
+#### E A QUALIDADE DO AJUSTE? FICOU BOM?
+
+***
+
+*Verificação dos pressupostos e ajuste do modelo*  \
+**O ajuste do modelo se mostra satisfatório e os pressupostos são atendidos**
+
+```{r, echo=FALSE, fig.width=9, fig.height=3, out.extra='style = "margin:0 -100px"'}
+ar.1 <- xyplot(residuals(lm.id2, type = "pearson") ~ fitted(lm.id2)
+               , pch = 16
+               , type = c("p", "g")
+               , jitter.x = TRUE
+               , xlab = "Valores ajustados"
+               , ylab = list(label = "Resíduos\nde Pearson", rot = 0)
+               , par.settings = settings
+               , main = "(a) Ajuste do modelo"
+               , panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(fitted(lm.id2), residuals(lm.id2, type = "pearson"), lwd = 2, col = 2)})
+ar.2 <- xyplot(sqrt(abs(residuals(lm.id2, type = "pearson"))) ~ fitted(lm.id2)
+               , pch = 16
+               , type = c("p", "g")
+               , jitter.x = TRUE
+               , xlab = "Valores ajustados"
+               , ylab = list(label = expression(sqrt(abs(atop("Resíduos", "de Pearson")))), rot = 0)
+               , par.settings = settings
+               , main = "(b) Relação média - variância"
+               , panel = function(...){
+                 panel.xyplot(...)
+                 panel.loess(fitted(lm.id2), sqrt(abs(residuals(lm.id2, type = "pearson"))), lwd = 2, col = 2)})
+print(ar.1
+      , position = c(0, 0, .5, 1)
+      , more = TRUE)
+print(ar.2
+      , position = c(.5, 0, 1, 1))
+```
+```{r, echo=FALSE, fig.width=8, fig.height=3, out.extra='style = "margin:0 -50px"'}
+ar.3 <- qqmath(residuals(lm.id2, type = "pearson")
+               , pch = 16
+               , type = c("p", "g")
+               , xlab = "Quantis teóricos"
+               , ylab = list(label = "Quantis\namostrais", rot = 0)
+               , par.settings = settings
+               , main = "(c) Normalidade") +
+  layer(panel.qqmathline(residuals(lm.id2, type = "pearson"), lwd = 2, col = 2))
+ar.4 <- qqmath(unlist(ranef(lm.id2)[[1]])
+               , pch = 16
+               , type = c("p", "g")
+               , xlab = "Quantis teóricos"
+               , ylab = list(label = "Quantis\namostrais", rot = 0)
+               , par.settings = settings
+               , main = "(d) Normalidade (intercepto)") +
+  layer(panel.qqmathline(unlist(ranef(lm.id2)[[1]][, 1]), lwd = 2, col = 2))
+print(ar.3
+      , position = c(0, 0, .5, 1)
+      , more = TRUE)
+print(ar.4
+      , position = c(.5, 0, 1, 1))
+```
+
+***
+
+#### INFERÊNCIA
+
+***
+
+```{r, echo=FALSE, fig.width= 8.5, fig.height=4.5, out.extra='style = "margin:0 -75px"'}
+pred <- expand.grid(Meses = seq(0, 12, .2)
+                    , Grupo = levels(data$Grupo)
+                    , CD4 = 0)
+pred$tMeses <- with(pred, ifelse(Meses <= 4, 0, Meses - 4))
+X <- model.matrix(terms(lm.id2), pred)
+pred$CD4 <- X %*% fixef(lm.id2)
+var <- diag(X %*% tcrossprod(vcov(lm.id2), X))
+tlval <- qt(p = .025
+            , df = df.residual(lm.id2)) * sqrt(var)
+tuval <- qt(p = .975
+            , df = df.residual(lm.id2)) * sqrt(var)
+pred$lwr <- pred$CD4 + tlval
+pred$upr <- pred$CD4 + tuval
+xyplot(CD4 ~ Meses
+       , pch = 16
+       , jitter.x = TRUE
+       , type = c("p", "g")
+       , groups = Grupo
+       , ylab = list(rot = 0)
+       , par.settings = settings
+       , sub = "Curvas ajustadas com bandas de 95% de confiança"
+       , key = list(corner = c(.95, .05), text = list(c("Grupo 1", "Grupo 2")), lines = list(col = c("#0080ff", 6), lwd = 2))
+       , scales = list(x = list(at = c(0, 1, 2, 4, 6, 8, 12))), data) +
+  as.layer(xyplot(CD4 ~ Meses, subset(pred, Grupo == "1")
+                  , type = "l", 
+                  prepanel = prepanel.cbH
+                  , cty = "bands"
+                  , ly = subset(pred, Grupo == "1")$lwr
+                  , uy = subset(pred, Grupo == "1")$upr
+                  , panel = panel.cbH
+                  , lwd = 2
+                  , col = "#0080ff")) +
+  as.layer(xyplot(CD4 ~ Meses, subset(pred, Grupo == "2")
+                  , type = "l"
+                  , prepanel = prepanel.cbH
+                  , cty = "bands"
+                  , ly = subset(pred, Grupo == "2")$lwr
+                  , uy = subset(pred, Grupo == "2")$upr
+                  , panel = panel.cbH
+                  , lwd = 2
+                  , col = 6))
+```
+
+> Observamos o mesmo comportamento dos demais gráficos, isso nos diz que o termo quadrático não é significativo
+
+**Estimativas do modelo em células/mm\(^{3}\)**
+
+```{r, echo=FALSE}
+output <- matrix(cbind(round(cbind(fixef(lm.id2)[[1]], coefficients(summary(lm.id2))[, 2][[1]]), 4)
+                       , round(cbind(fixef(lm.id2)[[1]] + fixef(lm.id2)[[5]]
+                                     , deltaMethod(object = fixef(lm.id2)[c(1, 5)]
+                                                   , g = "`(Intercept)` + `Grupo2`"
+                                                   , vcov = vcov(lm.id2)[c(1, 5), c(1, 5)])$SE), 4)
+                       , round(cbind(fixef(lm.id2)[[2]], coefficients(summary(lm.id2))[, 2][[2]]), 4)
+                       , round(cbind(fixef(lm.id2)[[3]], coefficients(summary(lm.id2))[, 2][[3]]), 4)
+                       , round(cbind(fixef(lm.id2)[[2]] + fixef(lm.id2)[[3]] + fixef(lm.id2)[[4]]
+                                     , deltaMethod(object = fixef(lm.id2)[2:4]
+                                                   , g = "`Meses` + `I(Meses^2)` + `tMeses`"
+                                                   , vcov = vcov(lm.id2)[2:4, 2:4])$SE), 4)
+                       , round(cbind(fixef(lm.id2)[[2]] + fixef(lm.id2)[[3]] + fixef(lm.id2)[[4]] + fixef(lm.id2)[[6]]
+                                     , deltaMethod(object = fixef(lm.id2)[c(2:4, 6)]
+                                                   , g = "`Meses` + `I(Meses^2)` + `tMeses` + `tMeses:Grupo2`"
+                                                   , vcov = vcov(lm.id2)[c(2:4, 6), c(2:4, 6)])$SE), 4)
+                       , cbind(round(attr(VarCorr(lm.id2)$Id, "stddev")[[1]], 4), " - ")
+                       , cbind(round(attr(VarCorr(lm.id2), "sc"), 4), " - "))
+                 , ncol = 2
+                 , byrow = TRUE)
+htmlTable(output
+          , header = c("Estimativa", "Erro padrão")
+          , rnames = c("Mês 0 - `Grupo` 1", "Mês 0 - `Grupo` 2", "Inclinação (x) - Mês &#8804; 4", "Inclinação (x&sup2;) - Mês &#8804; 4"
+                       , "Inclinação - `Grupo` 1", "Inclinação - `Grupo` 2" , "&sigma;<sub>Id</sub>", "&sigma;"))
+```
+
+```{r, echo=FALSE, fig.width= 8.5, fig.height=4.5, out.extra='style = "margin:0 -75px"'}
+plot(CD4 ~ Meses
+     , main = "Curvas ajustadas por indivíduo com curvas populacionais em vermelho"
+     , las = 1, data[data$Grupo == "2", ]) ; points(CD4 ~ Meses
+                                                    , col = "#0080ff", data[data$Grupo == "1", ])
+for(i in 1:50){
+  with(coefficients(lm.id2)[[1]], curve(`(Intercept)`[i] + {`Meses`[i]*x + `I(Meses^2)`[i]*x**2}*(x <= 4)
+                                        + {`Meses`[i]*x + `I(Meses^2)`[i]*x**2 + `tMeses`[i]*(x-4)}*(x > 4)
+                                       , add = TRUE
+                                       , lty = 2
+                                       , col = "#0080ff"))}
+for(i in 51:100){
+  with(coefficients(lm.id2)[[1]], curve(`(Intercept)`[i] + `Grupo2`[i] + {`Meses`[i]*x + `I(Meses^2)`[i]*x**2}*(x <= 4)
+                                       + {`Meses`[i]*x + `I(Meses^2)`[i]*x**2 + `tMeses`[i]*(x-4) + `tMeses:Grupo2`[i]*(x-4)}*(x > 4)
+                                       , add = TRUE
+                                       , lty = 2))}
+with(as.list(fixef(lm.id2)), curve(`(Intercept)` + {`Meses`*x + `I(Meses^2)`*x**2}*(x <= 4)
+                                   + {`Meses`*x + `I(Meses^2)`*x**2 + `tMeses`*(x-4)}*(x > 4)
+                                  , add = TRUE
+                                  , col = 2
+                                  , lwd = 3))
+with(as.list(fixef(lm.id2)), curve(`(Intercept)` + `Grupo2` + {`Meses`*x + `I(Meses^2)`*x**2}*(x <= 4)
+                                  + {`Meses`*x + `I(Meses^2)`*x**2 + `tMeses`*(x-4) + `tMeses:Grupo2`*(x-4)}*(x > 4)
+                                  , add = TRUE
+                                  , col = 2
+                                  , lwd = 3))
+abline(v = seq(0, 12, length = 7), h = seq(100, 600, length = 6), col = "gray90")
+legend(x = 10, y = 125, c("Grupo 1", "Grupo 2"), col = c("#0080ff", 1), lty = 2, bty = "n")
+```
+
+***
+
+```{r}
+anova(lm.id2, lm.id)
+```
+
+Com o teste de razão de verossimilhança temos a confirmação de que a inserção do termo quadrático não é
+estatísticamente significativa, i.e., os dados são melhores descritos pela reta até o ponto de quebra
+
+***
