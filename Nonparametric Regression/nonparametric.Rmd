@@ -1,0 +1,502 @@
+---
+title: "Nonparametric Regression \\
+        
+        - \\
+        
+        *notas de aula*"
+author: "[Henrique Aparecido Laureano](http://lattes.cnpq.br/2224901552085090)"
+date: "Outubro de 2015"
+output:
+  rmarkdown::html_vignette:
+    fig_width: 7
+    fig_height: 3.5
+    fig_cap: TRUE
+    toc: yes
+---
+
+<style type="text/css">
+#TOC {
+  margin: 0 145px;
+}
+</style>
+
+```{r setup, include = FALSE}
+require(knitr)
+opts_chunk$set(
+    cache = TRUE,
+    cache.path = "cache/",
+    fig.path = "graphs/",
+    dpi = 100,
+    fig.align = "center",
+    comment = NA,
+    warning = FALSE,
+    error = FALSE)
+```
+
+```{r pkg, include = FALSE}
+pkg <- c("faraway",
+         "latticeExtra",
+         "splines")
+sapply(pkg, require,
+       character.only = TRUE)
+settings <- list(par.main.text = list(font = 1,
+                                      just = "left", 
+                                      x = grid::unit(5, "mm")),
+                 par.sub.text = list(font = 2, 
+                                     just = "left", 
+                                     x = grid::unit(5, "mm")))
+```
+
+
+> Todas as informações contidas neste arquivo foram retiradas do capítulo 11 do livro: \
+  \
+  **Extending the Linear Model with R:** \
+  **Generalized Linear, Mixed Effects and Nonparametric Regression Models** \
+  de *Julian J. Faraway* \
+  \
+  Editora Chapman & Hall/CRC, Taylor & Francis Group (**2006**)
+
+***
+***
+
+# Kernel Estimators
+
+Na sua forma mais simples, ela é apenas um estimador média móvel. 
+
+Mais geralmente, nossa estimativa de $f$, chamada $\hat{f}_{\lambda} (x)$, é:
+
+> $$ \hat{f}_{\lambda} (x) =
+     \frac{1}{n \lambda} \sum_{j = 1}^{n} k \left( \frac{x - x_{j}}{\lambda} \right) Y_{j} =
+     \frac{1}{n} \sum_{j = 1}^{n} w_{j} Y_{j}, \quad \text{onde} \quad
+     w_{j} = k \left( \frac{x - x_{j}}{\lambda} \right) / \lambda $$
+
+$k$ é um kernel onde $\int k = 1$.
+
+O kernel de média móvel é retangular, mas kernels suavizadores podem fornecer melhores
+resultados.
+
+$\lambda$ é chamado de largura da banda, largura da janela ou parâmetro suavizador. Ele
+controla a suavidade da curva ajustada.
+
+Se os $x$s são espaçados de forma muito desigual, então este estimador pode fornecer pobres
+resultados. Este problema é um pouco amenizado pelo estimador *Nadaraya-Watson*:
+
+> $$ f_{\lambda} (x) = \frac{\sum_{j = 1}^{n} w_{j} Y_{j}}{\sum_{j = 1}^{n} w_{j}} $$
+
+Nós vemos que este estimador simplesmente modifica o estimador de média móvel então isso é
+uma verdadeira média ponderada onde os pesos para cada $y$ devem somar um.
+
+> A vantagem da abordagem não-paramétrica é a proteção contra erros de especificação do
+  modelo.
+
+A implementação de um estimador kernel necessita de duas coisas: o kernel ($k$) e o parâmetro
+suavizador ($\lambda$).
+
+A escolha ótima sob algumas suposições padrão é o kernel Epanechnikov:
+
+> $$ k(x) = \begin{cases}
+             \frac{3}{4} (1 - x^{2}) & |x| < 1 \\
+             0 & \text{caso contrário}
+            \end{cases}$$
+
+> A escolha do parâmetro suavizador $\lambda$ é crítica para a performance do estimador e é
+  muito mais importante que a escolha do kernel.
+
+Nós demonstramos o estimador Nadaraya-Watson a seguir para uma variedade de escolhas de
+larguras de banda no conjunto de dados Old Faithful na figura abaixo.
+
+Nós utilizamos a função $\texttt{ksmooth}$ que é parte do pacote base do $\texttt{R}$. Essa
+função carece de muitas características/funcionalidades que podem ser encontradas em alguns
+outros pacotes, mas ela é adequada para uso simples.
+
+O padrão utiliza um kernel uniforme, que é um pouco irregular/rugoso/áspero. Nós mudamos isso
+para um kernel normal:
+
+```{r, fig.width = 11, out.extra = 'style = "margin:0 -200px"', fig.cap = "Suavizador kernel Nadaraya-Watson com um kernel normal para três diferentes larguras de banda no conjunto de dados Old Faithful"}
+g1 <- xyplot(waiting ~ eruptions,
+             type = c("p", "g"),
+             pch = 16,
+             xlab = "Tempo das erupções",
+             ylab = list(label = "Tempo\nde\nespera",
+                         rot = 0),
+             main = "Largura da banda: 0.1",
+             scales = list(x = list(tick.number = 7),
+                           y = list(tick.number = 10)),
+             par.settings = settings,
+             faithful) +
+  layer(panel.lines(ksmooth(faithful$eruptions, faithful$waiting,
+                            "normal",
+                            .1),
+                    lwd = 2,
+                    col = 2))
+g2 <- xyplot(waiting ~ eruptions,
+             type = c("p", "g"),
+             pch = 16,
+             xlab = "Tempo das erupções",
+             ylab = list(label = "Tempo\nde\nespera",
+                         rot = 0),
+             main = "Largura da banda: 0.5",
+             scales = list(x = list(tick.number = 7),
+                           y = list(tick.number = 10)),
+             par.settings = settings,
+             faithful) +
+  layer(panel.lines(ksmooth(faithful$eruptions, faithful$waiting,
+                            "normal",
+                            .5),
+                    lwd = 2,
+                    col = 2))
+g3 <- xyplot(waiting ~ eruptions,
+             type = c("p", "g"),
+             pch = 16,
+             xlab = "Tempo das erupções",
+             ylab = list(label = "Tempo\nde\nespera",
+                         rot = 0),
+             main = "Largura da banda: 2",
+             scales = list(x = list(tick.number = 7),
+                           y = list(tick.number = 10)),
+             par.settings = settings,
+             faithful) +
+  layer(panel.lines(ksmooth(faithful$eruptions, faithful$waiting,
+                            "normal",
+                            2),
+                    lwd = 2,
+                    col = 2))
+print(g1,
+      position = c(0, 0,
+                   1/3, 1),
+      more = TRUE)
+print(g2,
+      position = c(1/3, 0,
+                   2/3, 1),
+      more = TRUE)
+print(g3,
+      position = c(2/3, 0,
+                   1, 1))
+```
+
+Validação cruzada (CV: cross-validation) é um popular método de propósito geral. O critério é:
+
+> $$ CV(\lambda) = \frac{1}{n} \sum_{j = 1}^{n} (y_{j} - \hat{f}_{\lambda (j)} (x_{j}))^{2} $$
+
+onde $(j)$ indica que o ponto $j$ é retirado do ajuste. Nós pegamos o $\lambda$ que minimiza
+este critério.
+
+A verdadeira validação cruzada é cara computacionalmente, por isso uma aproximação para ela,
+conhecida como validação cruzada generalizada ou GCV (generalized cross-validation), é
+utilizada em alguns momentos.
+
+***
+***
+
+# Splines
+
+***
+
+## Smoothing Splines
+
+Nós escolhemos $\hat{f}$ para minimizar um critério de mínimos quadrados modificado:
+
+> $$ \frac{1}{n} \sum (y_{i} - f(x_{i}))^{2} + \lambda \int [{f}''(x)]^{2} \text{d}x $$
+
+onde $\lambda > 0$ é o parâmetro suavizador e $\int [{f}''(x)]^{2} \text{d}x$ é uma penalidade
+irregular (rugosa, aspera, grosseira). Quando $f$ é irregular, a penalidade é grande, mas
+quando $f$ é suave, a penalidade é pequena.
+
+Para esta escolha de penalidade irregular, a solução é de uma particular forma:
+
+$\hat{f}$ é um spline cúbico. Isso significa que $\hat{f}$ é um polinômio cúbico segmentado em
+cada intervalo ($x_{i}$, $x_{i + 1}$). Isso tem a propriedade que $\hat{f}$, ${\hat{f}}'$ e
+${\hat{f}}''$ são contínuas. Dado isso nós sabemos a forma da solução, a estimação é reduzida
+ao problema paramétrico de estimar os coeficientes de polinômios.
+
+No $\texttt{R}$, validação cruzada é utilizada para selecionar o parâmetro suavizador por
+padrão.
+
+Nós mostramos a escolha padrão de suavização para três casos teste. Old Faithful, 
+$\texttt{exa}$ e $\texttt{exb}$, sendo os dois últimos do pacote $\texttt{faraway}$:
+
+```{r fig.width = 11, out.extra = 'style = "margin:0 -200px"', fig.cap = "Ajuste da suavização por splines. Para o gráfico do meio e da direita, a verdadeira função é mostrada em preto e o ajuste do spline em vermelho"}
+g1 <- xyplot(waiting ~ eruptions,
+             type = c("p", "g"),
+             pch = 16,
+             xlab = "Tempo das erupções",
+             ylab = list(label = "Tempo\nde\nespera",
+                         rot = 0),
+             scales = list(x = list(tick.number = 7),
+                           y = list(tick.number = 10)),
+             faithful) +
+  layer(panel.lines(smooth.spline(faithful$eruptions, faithful$waiting),
+                    lwd = 2,
+                    col = 2))
+g2 <- xyplot(y ~ x,
+             type = c("p", "g"),
+             pch = 16,
+             ylab = list(rot = 0),
+             exa) +
+  layer(panel.lines(exa$x, exa$m,
+                    lwd = 3,
+                    col = 1)) +
+  layer(panel.lines(smooth.spline(exa$x, exa$y),
+                    lwd = 2,
+                    col = 2))
+g3 <- xyplot(y ~ x,
+             type = c("p", "g"),
+             pch = 16,
+             ylab = list(rot = 0),
+             scales = list(y = list(tick.number = 6)),
+             exb) +
+  layer(panel.lines(exb$x, exb$m,
+                    lwd = 3,
+                    col = 1)) +
+  layer(panel.lines(smooth.spline(exb$x, exb$y),
+                    lwd = 2,
+                    col = 2))
+print(g1,
+      position = c(0, 0,
+                   1/3, 1),
+      more = TRUE)
+print(g2,
+      position = c(1/3, 0,
+                   2/3, 1),
+      more = TRUE)
+print(g3,
+      position = c(2/3, 0,
+                   1, 1))
+```
+
+***
+
+## Regression Splines
+
+Os nós (knots) dos B-splines utilizados para as bases são tipicamente muito pequenos em número
+do que o tamanho da amostra. O número de nós escolhidos controlam a quantidade da suavização.
+Para suavização splines, os valores únicos observados de $x$ são os nós e $\lambda$ é 
+utilizado para controlar a suavização.
+
+É discutível se o método de regressão spline é paramétrico ou não-paramétrico, porque uma vez
+que os nós são escolhidos, uma família paramétrica é especificada com um número finito de
+parâmetros. É a liberdade para escolher o número de nós que faz do método não-paramétrico.
+
+Nós demonstramos algumas regressões por spline aqui. Nós utilizamos splines lineares 
+segmentados nesete exemplo, que é construído e representado graficamente a seguir.
+
+O spline é mostrado no gráfico da esquerda. As funções base são mostradas no gráfico da 
+direita.
+
+```{r, fig.cap = "Uma função base para splines de regressão linear mostrado na esquerda e o completo conjunto mostrado na direita"}
+rhs <- function(x, c) ifelse(x > c, x - c, 0)
+par(mfrow = c(1, 2)) ; curve(rhs(x, .5), 0, 1,
+                             lwd = 2,
+                             las = 1)
+(knots <- 0 : 9/10)
+dm <- outer(exa$x, knots, rhs)
+matplot(exa$x, dm,
+        type = "l",
+        xlab = "x",
+        lwd = 2,
+        las = 1) ; layout(1)
+```
+
+Agora nós calculamos e mostramos o ajuste da regressão.
+
+Onde o gráfico é mostrado à esquerda. Por as funções base serem segmentos lineares, o ajuste é
+também de segmentos lineares.
+
+Um melhor ajuste pode ser obtido ajustando os nós que eles sejam mais densos em regiões de 
+maior curvatura. O gráfico é mostrado à direita.
+
+```{r, fig.cap = "Nós uniformemente espaçados mostrado na esquerda e nós relativamente espeçados na curvatura na direita"}
+g <- lm(exa$y ~ dm)
+g1 <- xyplot(y ~ x,
+             type = c("p", "g"),
+             pch = 16,
+             ylab = list(rot = 0),
+             scales = list(y = list(tick.number = 6)),
+             exa) +
+  layer(panel.lines(exa$x, predict(g),
+                    lwd = 2,
+                    col = 2))
+newknots <- c(0, .5, .6, .65, .7, .75, .8, .85, .9, .95)
+dmn <- outer(exa$x, newknots, rhs)
+gn <- lm(exa$y ~ dmn)
+g2 <- xyplot(y ~ x,
+             type = c("p", "g"),
+             pch = 16,
+             ylab = list(rot = 0),
+             scales = list(y = list(tick.number = 6)),
+             exa) +
+  layer(panel.lines(exa$x, predict(gn),
+                    lwd = 2,
+                    col = 2))
+print(g1,
+      position = c(0, 0,
+                   .5, 1),
+      more = TRUE)
+print(g2,
+      position = c(.5, 0,
+                   1, 1))
+```
+
+A função $\texttt{bs()}$ do pacote $\texttt{splines}$ pode ser utilizada para gerar as
+apropriadas bases dos splines (splines de alta ordem/grau). O padrão é B-splines cúbicos. 
+
+Nós mostramos 12 B-splines cúbicos uniformemente espaçados no intervalo $[0, 1]$. Os splines
+próximos da borda pegam uma diferente forma como visto no gráfico abaixo.
+
+```{r, fig.width = 5, fig.cap = "Bases de um B-splines cúbico"}
+matplot(bs(seq(0, 1, length.out = 1000),
+           df = 12),
+        type = "l",
+        las = 1,
+        ylab = "")
+```
+
+Nós podemos utilizar mínimos quadrados para determinar os coeficientes. O ajuste é mostrado no
+gráfico abaixo.
+
+```{r, fig.width = 5, fig.cap = "Ajuste de um B-splines cúbico"}
+sm1 <- lm(y ~ bs(x, 12), exa)
+xyplot(y ~ x,
+       type = c("p", "g"),
+       pch = 16,
+       ylab = list(rot = 0),
+       exa) +
+  layer(panel.lines(exa$x, exa$m,
+                    lwd = 3,
+                    col = 1)) +
+  layer(panel.lines(exa$x, predict(sm1),
+                    lwd = 2,
+                    col = 2))
+```
+
+***
+***
+
+# Local Polynomials
+
+Primeiro nós selecionamos uma janela. Nós então ajustamos um polinômio aos dados nessa janela.
+A resposta predita no meio da janela é o valor ajustado. Nós então simplesmente deslizamos a
+janela sob o alcance dos dados, repetindo o processo de ajuste nas janelas móveis.
+
+A implementação mais bem conhecida desse tipo de suavização é chamada $lowess$ ou $loess$.
+
+Um termo linear é a escolha padrão na função $loess$.
+
+É importante selecionar bem a largura da janela. A escolha padrão pega três quartos dos dados.
+
+Para o dado Old Faithful a escolha padrão é satisfatória, como visto no gráfico da esquerda.
+
+Para o dado $\texttt{exa}$, a escolha padrão é muito larga. A escolha que minimiza o erro
+quadrático integrado entre a estimativa e a verdadeira função necessita de um alcance (
+proporção da extensão dos dados) de 0.22. Ambos os ajustes são mostrados na gráfico do meio.
+
+Para o dado $\texttt{exb}$, a escolha ótima de alcance é um (isso é todos os dados). Isso não
+é uma surpresa já que a verdadeira função é uma constante e então uma suavização máxima é
+desejada. Nós podemos ver que as qualidades robustas do loess previnem o ajuste de se tornar
+muito distorcido pelos dois outliers mesmo com a escolha padrão de alcance da suavização.
+
+```{r fig.width = 11, out.extra = 'style = "margin:0 -200px"', fig.cap = "Suavização por loess: Dado Old Faithful é mostrado no gráfico da esquerda com a quantidade default de suavização. 'exa' é mostrado no meio e 'exb' no gráfico da direita. A verdadeira função é mostrada em preto com a escolha padrão em verde e a respectiva quantidade ótima de suavização em vermelho"}
+g1 <- xyplot(waiting ~ eruptions,
+             type = c("p", "g"),
+             pch = 16,
+             xlab = "Tempo das erupções",
+             ylab = list(label = "Tempo\nde\nespera",
+                         rot = 0),
+             scales = list(x = list(tick.number = 7),
+                           y = list(tick.number = 10)),
+             faithful) +
+  layer(panel.lines(loess(waiting ~ eruptions, faithful)$x[order(faithful$eruptions)],
+                    loess(waiting ~ eruptions, faithful)$fitted[order(faithful$eruptions)],
+                    lwd = 2,
+                    col = 2))
+g2 <- xyplot(y ~ x,
+             type = c("p", "g"),
+             pch = 16,
+             ylab = list(rot = 0),
+             exa) +
+  layer(panel.lines(exa$x, exa$m,
+                    lwd = 3,
+                    col = 1)) +
+  layer(panel.lines(loess(y ~ x, exa)$x, loess(y ~ x, exa)$fitted,
+                    lwd = 3,
+                    col = 3)) +
+  layer(panel.lines(loess(y ~ x, exa,
+                          span = .22)$x,
+                    loess(y ~ x, exa,
+                          span = .22)$fitted,
+                    lwd = 2,
+                    col = 2))
+g3 <- xyplot(y ~ x,
+             type = c("p", "g"),
+             pch = 16,
+             ylab = list(rot = 0),
+             scales = list(y = list(tick.number = 6)),
+             exb) +
+  layer(panel.lines(exb$x, exb$m,
+                    lwd = 3,
+                    col = 1)) +
+  layer(panel.lines(loess(y ~ x, exb)$x, loess(y ~ x, exb)$fitted,
+                    lwd = 3,
+                    col = 3)) +
+  layer(panel.lines(loess(y ~ x, exb,
+                          span = 1)$x,
+                    loess(y ~ x, exb,
+                          span = 1)$fitted,
+                    lwd = 2,
+                    col = 2))
+print(g1,
+      position = c(0, 0,
+                   1/3, 1),
+      more = TRUE)
+print(g2,
+      position = c(1/3, 0,
+                   2/3, 1),
+      more = TRUE)
+print(g3,
+      position = c(2/3, 0,
+                   1, 1))
+```
+
+***
+***
+
+# Nearest Neighbor
+
+Nós definimos $\hat{f}_{\lambda} (x) =$ média dos $\lambda$ vizinhos mais próximos de $x$. Nós
+deixamos a largura da janela variar para acomodar o mesmo número de pontos. Nós precisamos
+selecionar o número de vizinhos a serem utilizados, validação cruzada pode ser utilizada para
+este propósito.
+
+***
+***
+
+# Running Medians
+
+Regressão não-paramétrica é mais robusta que regressão paramétrica no sentido de modelos, mas
+isso não significa que ela é robosta para outliers.
+
+Métodos baseados em médias locais são sensíveis para outliers, então a mediana pode ser útil.
+Nós deixamos $N(x, \lambda) = \{i:  x_{i}$ é um dos $\lambda$ vizinhos mais próximos de $x\}$
+então:
+
+> $$ \hat{f}_{\lambda} (x) = \text{mediana}\{Y_{i} \text{ tal que } i \in N(x, \lambda) $$
+
+Este método é robusto para outliers, mas produz a ajuste com aparência irregular/rugosa.
+Pode-se querer suavizar novamente utilizando outro método. Isso é chamada=o de twicing.
+
+Nós achamos que o suavizador loess faz uma boa suavização em todos os propósitos. Ele é
+robusto para outliers e ainda pode produzir ajustes suaves.
+
+Quando você está confiante que outliers não estão presentes, suavização por splines é mais
+eficiente que polinômios locais.
+
+***
+***
+
+> Maldição da dimensionalidade: \
+  \
+  Você precisa de um número extremamente grande de pontos para cobrir um espaço de alta
+  dimensão para alta densidade.
+
+***
+***
