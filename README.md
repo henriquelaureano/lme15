@@ -15,4 +15,11 @@ Direct link to the activities:
   - [Eduardo](http://mynameislaure.github.io/emr15/piece-reg/piecewise.html)
 
 + [Non-linear Models](http://mynameislaure.github.io/emr15/nlm/)
+
++ Transformed likelihood
+  - Henrique
+    * [Theory](http://mynameislaure.github.io/emr15/translikeli/theory.html)
+    * [Application](http://mynameislaure.github.io/emr15/translikeli/application.html)
+  - [Eduardo](http://mynameislaure.github.io/emr15/translikeli/application-eduardojr.html)
+
 ***
