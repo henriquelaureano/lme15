@@ -1,4 +1,4 @@
-# Extensões de Modelos de Regressão
+# Extensões de modelos de regressão
 
 > Repository with the activities made during the course ce092
 > (extensions of regression models) in the second semester of 2015.
@@ -10,11 +10,11 @@ Professor: [Paulo Justiniano](http://leg.ufpr.br/~paulojus/)
 
 Direct link to the activities:
 
-+ Piecewise Regression
++ Piecewise regression
   - [Henrique](http://mynameislaure.github.io/emr15/piece-reg/)
   - [Eduardo](http://mynameislaure.github.io/emr15/piece-reg/piecewise.html)
 
-+ [Non-linear Models](http://mynameislaure.github.io/emr15/nlm/)
++ [Nonlinear models](http://mynameislaure.github.io/emr15/nlm/)
 
 + Transformed likelihood
   - Henrique
@@ -22,13 +22,13 @@ Direct link to the activities:
     * [Application](http://mynameislaure.github.io/emr15/translikeli/application.html)
   - [Eduardo](http://mynameislaure.github.io/emr15/translikeli/application-eduardojr.html)
 
-+ Mixed Effects Models
++ Mixed effect models
   - [Poisson](http://mynameislaure.github.io/emr15/mem/mixed_poisson_model.html)
   - [Piecewise](http://mynameislaure.github.io/emr15/mem/piecewise_mixed_model.html)
 
-+ [Nonparametric Regression](http://mynameislaure.github.io/emr15/nonp-reg/)
++ [Nonparametric regression](http://mynameislaure.github.io/emr15/nonp-reg/)
 
-+ Heteroscedastic Regression Models
++ Heteroscedastic regression models
   - [Theory](http://mynameislaure.github.io/emr15/het-regm/theory.html)
   - [Application](http://mynameislaure.github.io/emr15/het-regm/application.html)
 
