@@ -6,7 +6,7 @@
 Above in the folders we have the rmd files and some r scripts, below we have
 the link to the html files.
 
-Professor: [Paulo Justiniano](http://leg.ufpr.br/~paulojus/)
+Professor: [Prof. Ph.D. Paulo Justiniano](http://leg.ufpr.br/~paulojus/)
 
 Direct link to the activities:
 
